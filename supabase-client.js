@@ -8,7 +8,7 @@
 
   // NOTE: keep these as var to avoid redeclare crashes if file is loaded twice.
   var SUPABASE_URL = "https://quhcdcpzujgkjoyszlnu.supabase.co";
-  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1aGNkY3B6dWpna2pveXN6bG51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3NTA5NzQsImV4cCI6MjA4NjMyNjk3NH0.83W468Yi0OqmsVsRMAhu5vDcwbUV9SIEpmHe5gaEDM4";
+  var SUPABASE_ANON_KEY = "sb_publishable_8TlrdPkx4_jb9K0ZQKuDJw_QGioNLSh";
 
   var _client = null;
 
