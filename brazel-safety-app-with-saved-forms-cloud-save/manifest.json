@@ -1,0 +1,33 @@
+{
+  "name": "Brazel Safety Documentation",
+  "short_name": "Brazel Safety",
+  "description": "Field Level Hazard Assessment and Safety Documentation",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#DC3545",
+  "theme_color": "#DC3545",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-192-red.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512-red.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "New Form",
+      "url": "/?action=new-form",
+      "description": "Start a new hazard assessment form"
+    }
+  ]
+}

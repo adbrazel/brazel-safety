@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Brazel Safety Documentation</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="admin-panel" class="screen" style="display: none;">
+        <div class="header">
+            <h1>Admin Panel</h1>
+            <button id="admin-logout" class="btn-secondary">Back to Forms</button>
+        </div>
+        
+        <div class="container">
+            <!-- Job Management Section -->
+            <section class="admin-section">
+                <h2>Job Management</h2>
+                <div class="job-list" id="job-list"></div>
+                <button id="add-job-btn" class="btn-primary">+ Add New Job</button>
+            </section>
+
+            <!-- Hazard Library Section -->
+            <section class="admin-section">
+                <h2>Hazard Library</h2>
+                <div class="hazard-list" id="hazard-list"></div>
+                <button id="add-hazard-btn" class="btn-primary">+ Add New Hazard</button>
+            </section>
+
+            <!-- Safety Topics Section -->
+            <section class="admin-section">
+                <h2>Safety Meeting Topics</h2>
+                <div class="topic-list" id="topic-list"></div>
+                <button id="add-topic-btn" class="btn-primary">+ Add New Topic</button>
+            </section>
+        
+            <!-- Resource Library Section -->
+            <section class="admin-section">
+                <h2>Resource Library</h2>
+                <p class="hint">Upload PDF files (OH&S docs, SJP, SOPs). These will appear in the app Resources screen.</p>
+                <form id="resource-form" class="inline-form">
+                    <input id="resource-name" type="text" placeholder="Document name" required>
+                    <input id="resource-category" type="text" placeholder="Category (e.g., OH&S, SOP, SJP)">
+                    <input id="resource-file" type="file" accept="application/pdf" required>
+                    <button type="submit" class="btn-primary">Upload PDF</button>
+                </form>
+                <div id="resource-admin-list" class="resource-list"></div>
+            </section>
+
+</div>
+    </div>
+
+    <!-- Main Form Screen -->
+    <div id="form-screen" class="screen" style="display: none;">
+        <div class="header">
+            <h1 class="company-title">Brazel Construction Ltd.<br>Safety Forms Application</h1>
+            <div class="emergency-contact">
+                Emergency Contact: Aaron Brazel<br>
+                (403) 669-2900
+            </div>
+            <div class="header-actions">
+                <button id="forms-btn" class="btn-secondary">Saved Forms</button>
+                <button id="resources-btn" class="btn-secondary">Resources</button>
+                <button id="admin-btn" class="btn-secondary">Admin</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <h2 class="page-title">Field Level Hazard Assessment</h2>
+            
+            <div class="form-actions">
+                <button id="new-form-btn" class="btn-primary">New Form</button>
+                <button id="duplicate-form-btn" class="btn-secondary">Duplicate Form</button>
+                <div class="status-indicator">
+                    <span id="connection-status" class="status-dot online"></span>
+                    <span id="connection-text">Online</span>
+                </div>
+            </div>
+
+            <!-- Recent Forms List (for duplication) -->
+            <div id="recent-forms" style="display: none;">
+                <h3>Select Form to Duplicate (Last 30 Days)</h3>
+                <div id="recent-forms-list"></div>
+                <button id="cancel-duplicate-btn" class="btn-secondary">Cancel</button>
+            </div>
+
+            <!-- Hazard Assessment Form -->
+            <form id="hazard-assessment-form" style="display: none;">
+                <h2>Field Level Hazard Assessment</h2>
+
+                <!-- Job Selection -->
+                <div class="form-group">
+                    <label for="job-select">Job *</label>
+                    <select id="job-select" required>
+                        <option value="">Select Job...</option>
+                    </select>
+                </div>
+
+                <!-- Auto-populated job details -->
+                <div id="job-details" class="job-details-box" style="display: none;">
+                    <p><strong>Address:</strong> <span id="job-address"></span></p>
+                    <p><strong>Address Line 2:</strong> <span id="job-address2"></span></p>
+                    <p><strong>Emergency Phone:</strong> <span id="job-emergency-phone"></span></p>
+                </div>
+
+                <!-- Date -->
+                <div class="form-group">
+                    <label for="form-date">Date *</label>
+                    <input type="date" id="form-date" required>
+                </div>
+
+                <!-- Muster Point -->
+                <div class="form-group">
+                    <label for="muster-point">Muster Point *</label>
+                    <input type="text" id="muster-point" placeholder="e.g., Main gate, parking lot" required>
+                </div>
+
+                <!-- Emergency Response Plan Reviewed -->
+                <div class="form-group">
+                    <label>Emergency Response Plan Reviewed *</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="erp-reviewed" value="yes" required> Yes</label>
+                        <label><input type="radio" name="erp-reviewed" value="no"> No</label>
+                    </div>
+                </div>
+
+                <!-- Scope of Work -->
+                <div class="form-group">
+                    <label for="scope-of-work">Scope of Work *</label>
+                    <textarea id="scope-of-work" rows="4" placeholder="Describe the work to be performed..." required></textarea>
+                </div>
+
+                <!-- Hazard Checklist -->
+                <div class="form-section">
+                    <h3>Select Applicable Hazards</h3>
+                    <div id="hazard-checklist" class="hazard-checklist"></div>
+                </div>
+
+                <!-- Hazard Assessment Matrix -->
+                <div class="form-section">
+                    <h3>Hazard Assessment Matrix</h3>
+                    <div id="hazard-matrix" class="hazard-matrix"></div>
+                </div>
+
+                <!-- Safety Meeting Topics Discussed -->
+                <div class="form-section">
+                    <h3>Safety Meeting Topics Discussed</h3>
+                    <p style="margin-bottom: 10px; color: #7f8c8d;">Select all topics that were discussed at today's safety meeting:</p>
+                    <div id="safety-topics-checklist" class="safety-topics-checklist"></div>
+                </div>
+
+                <!-- Additional Safety Topics / Comments -->
+                <div class="form-group">
+                    <label for="additional-topics">Additional Topics Discussed</label>
+                    <textarea id="additional-topics" rows="2" placeholder="List any additional topics or items discussed here..."></textarea>
+                </div>
+
+                <!-- Safety Meeting Notes -->
+                <div class="form-group">
+                    <label for="safety-meeting">Safety Meeting Notes</label>
+                    <textarea id="safety-meeting" rows="3" placeholder="Enter any additional safety meeting notes or key points..."></textarea>
+                </div>
+
+                <!-- Attendees Section -->
+                <div class="form-section">
+                    <h3>Attendees</h3>
+                    <div id="attendees-list"></div>
+                    <button type="button" id="add-attendee-btn" class="btn-secondary">+ Add Attendee</button>
+                </div>
+
+                <!-- Photos -->
+                <div class="form-section">
+                    <h3>Photos (Optional - Max 3)</h3>
+                    <div class="photo-section">
+                        <input type="file" id="photo-input" accept="image/*" capture="environment" style="display: none;">
+                        <button type="button" id="add-photo-btn" class="btn-secondary">📷 Add Photo</button>
+                        <div id="photos-preview" class="photos-preview"></div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="form-actions">
+                    <button type="button" id="save-draft-btn" class="btn-secondary">Save Draft</button>
+                    <button type="submit" id="submit-form-btn" class="btn-primary">Submit Form</button>
+                </div>
+
+                <div class="form-info">
+                    <p id="auto-save-status">Form will auto-save at 8:00 PM</p>
+                    <p id="form-id"></p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Job Entry -->
+    <div id="job-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="job-modal-title">Add New Job</h3>
+            <form id="job-form">
+                <div class="form-group">
+                    <label for="job-name">Job Name *</label>
+                    <input type="text" id="job-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="job-address-input">Address *</label>
+                    <input type="text" id="job-address-input" required>
+                </div>
+                <div class="form-group">
+                    <label for="job-address2-input">Address Line 2</label>
+                    <input type="text" id="job-address2-input">
+                </div>
+                <div class="form-group">
+                    <label for="job-emergency-input">Emergency Phone *</label>
+                    <input type="tel" id="job-emergency-input" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-job-btn" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Job</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Hazard Entry -->
+    <div id="hazard-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="hazard-modal-title">Add New Hazard</h3>
+            <form id="hazard-form">
+                <div class="form-group">
+                    <label for="hazard-name">Hazard Name *</label>
+                    <input type="text" id="hazard-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="hazard-risk">Risk Rating *</label>
+                    <select id="hazard-risk" required>
+                        <option value="">Select...</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="hazard-severity">Severity *</label>
+                    <select id="hazard-severity" required>
+                        <option value="">Select...</option>
+                        <option value="Minor">Minor</option>
+                        <option value="Moderate">Moderate</option>
+                        <option value="Severe">Severe</option>
+                        <option value="Critical">Critical</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="hazard-controls">Suggested Controls</label>
+                    <textarea id="hazard-controls" rows="3" placeholder="Enter suggested control measures..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-hazard-btn" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Hazard</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Safety Topic Entry -->
+    <div id="topic-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="topic-modal-title">Add New Safety Topic</h3>
+            <form id="topic-form">
+                <div class="form-group">
+                    <label for="topic-name">Topic Name *</label>
+                    <input type="text" id="topic-name" required placeholder="e.g., Fall Protection, Traffic Control">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-topic-btn" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Topic</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin Password Modal -->
+    <div id="password-modal" class="modal">
+        <div class="modal-content">
+            <h3>Admin Access</h3>
+            <form id="password-form">
+                <div class="form-group">
+                    <label for="admin-password">Enter Admin Password</label>
+                    <input type="password" id="admin-password" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-password-btn" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    
+    <!-- Resources Screen -->
+    <div id="resources-screen" class="screen" style="display: none;">
+        <div class="header">
+            <h1>Resources Library</h1>
+            <button id="resources-back" class="btn-secondary">Back</button>
+        </div>
+        <div class="container">
+            <p class="hint">PDF resources (OH&S docs, SJP, SOPs, etc.). If you're offline, links may not open.</p>
+            <div class="form-group">
+                <label for="resources-filter">Filter by category</label>
+                <select id="resources-filter">
+                    <option value="">All</option>
+                </select>
+            </div>
+            <div id="resources-list" class="resource-list"></div>
+        </div>
+    </div>
+
+    
+    <!-- Saved Forms Screen -->
+    <div id="forms-screen" class="screen" style="display: none;">
+        <div class="header">
+            <h1>Saved Forms</h1>
+            <button id="forms-back" class="btn-secondary">Back</button>
+        </div>
+        <div class="container">
+            <p class="hint">Forms are stored on this device. If a form wasn’t synced/emailed, you can retry when online.</p>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label for="forms-filter">Show</label>
+                    <select id="forms-filter">
+                        <option value="all">All</option>
+                        <option value="pending">Pending (not emailed)</option>
+                        <option value="emailed">Emailed</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label for="forms-search">Search</label>
+                    <input id="forms-search" type="text" placeholder="Job, date, attendee...">
+                </div>
+            </div>
+
+            <div class="form-row" style="margin-top:10px;">
+                <button id="forms-refresh" class="btn-secondary">Refresh</button>
+                <button id="forms-retry-all" class="btn-primary">Retry Pending</button>
+            </div>
+
+            <div id="forms-list" class="saved-forms-list" style="margin-top:14px;"></div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-client.js"></script>
+    <script src="storage.js"></script>
+    <script src="pdf-generator.js"></script>
+    <script src="email-sender.js"></script>
+    <script src="admin.js"></script>
+    <script src="form.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
