@@ -61,6 +61,58 @@
                 <div id="resource-admin-list" class="resource-list"></div>
             </section>
 
+
+<!-- Reporting Section -->
+<section class="admin-section">
+    <h2>Monthly Reporting</h2>
+    <p class="hint">Summaries are pulled from the Supabase <code>forms</code> table (requires online access).</p>
+    <div class="form-row">
+        <div class="form-group" style="flex:1;">
+            <label for="report-month">Month</label>
+            <input id="report-month" type="month">
+        </div>
+        <div class="form-row" style="align-items:flex-end; gap:10px;">
+            <button id="report-refresh" class="btn-secondary">Refresh</button>
+            <button id="report-export" class="btn-primary">Export CSV</button>
+        </div>
+    </div>
+
+    <div class="report-grid">
+        <div class="report-card">
+            <div class="report-label">Forms completed</div>
+            <div id="report-forms" class="report-value">—</div>
+        </div>
+        <div class="report-card">
+            <div class="report-label">Total attendee signatures</div>
+            <div id="report-attendees" class="report-value">—</div>
+        </div>
+        <div class="report-card">
+            <div class="report-label">Unique employees</div>
+            <div id="report-unique" class="report-value">—</div>
+        </div>
+        <div class="report-card">
+            <div class="report-label">Unique jobs</div>
+            <div id="report-jobs" class="report-value">—</div>
+        </div>
+    </div>
+
+    <div class="report-table-wrap">
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Job</th>
+                    <th>Supervisor</th>
+                    <th>Attendees</th>
+                    <th>Email sent</th>
+                    <th>PDF</th>
+                </tr>
+            </thead>
+            <tbody id="report-rows"></tbody>
+        </table>
+    </div>
+</section>
+
 </div>
     </div>
 
@@ -80,6 +132,13 @@
         </div>
 
         <div class="container">
+            <div class="quick-actions">
+                <button id="hazard-open" class="btn-primary">FLHA + Safety Meeting</button>
+                <button id="incident-open" class="btn-secondary">Incident / Near Miss</button>
+                <button id="inspection-open" class="btn-secondary">Worksite Inspection</button>
+            </div>
+            <p class="hint">Choose a form type. All forms save locally first, then upload/email when online.</p>
+
             <h2 class="page-title">Field Level Hazard Assessment</h2>
             
             <div class="form-actions">
@@ -362,7 +421,213 @@
         </div>
     </div>
 
+    
+    <!-- Incident / Near Miss Screen -->
+    <div id="incident-screen" class="screen" style="display:none;">
+        <div class="header">
+            <h1>Incident / Near Miss</h1>
+            <button id="incident-back" class="btn-secondary">Back</button>
+        </div>
+
+        <div class="container">
+            <form id="incident-form">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Date</label>
+                        <input type="date" id="incident-date" required>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Time</label>
+                        <input type="time" id="incident-time" required>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Job</label>
+                        <select id="incident-job" required></select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Reported by</label>
+                        <input type="text" id="incident-reporter" placeholder="Full name" required>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Supervisor (if different)</label>
+                        <input type="text" id="incident-supervisor" placeholder="Full name">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex:2;">
+                        <label>Location (work site / area)</label>
+                        <input type="text" id="incident-location" placeholder="e.g., north laydown, trench area" required>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Type</label>
+                        <select id="incident-type" required>
+                            <option value="Near Miss">Near Miss</option>
+                            <option value="Incident">Incident</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>What happened?</label>
+                    <textarea id="incident-description" rows="4" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Immediate actions taken</label>
+                    <textarea id="incident-actions" rows="3"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Injury?</label>
+                        <select id="incident-injury" required>
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Witnesses (optional)</label>
+                        <input type="text" id="incident-witnesses" placeholder="Comma-separated names">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Classification</label>
+                        <select id="incident-classification" required>
+                            <option value="Near miss (no damage)">Near miss (no damage)</option>
+                            <option value="Near miss (property damage)">Near miss (property damage)</option>
+                            <option value="First aid">First aid</option>
+                            <option value="Medical aid">Medical aid</option>
+                            <option value="Lost time">Lost time</option>
+                            <option value="Serious incident (reportable)">Serious incident (reportable)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Reported to Alberta OHS?</label>
+                        <select id="incident-reported-ohs" required>
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Involved worker (if applicable)</label>
+                        <input type="text" id="incident-worker" placeholder="Full name">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Equipment / vehicle involved (optional)</label>
+                        <input type="text" id="incident-equipment" placeholder="e.g., excavator 200 series">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Root cause(s) (optional)</label>
+                    <textarea id="incident-rootcause" rows="3" placeholder="Contributing factors / root causes"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Corrective actions + responsibility (optional)</label>
+                    <textarea id="incident-corrective" rows="3" placeholder="What will change? Who owns it? Due date?"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Photos (optional)</label>
+                    <input id="incident-photos" type="file" accept="image/*" capture="environment" multiple>
+                    <div id="incident-photo-preview" class="photo-preview"></div>
+                    <p class="hint">Up to 6 photos. Photos will be compressed for storage/PDF.</p>
+                </div>
+
+                <div class="form-group">
+                    <label>Signature</label>
+                    <div class="signature-wrap">
+                        <canvas id="incident-signature" class="signature-pad" width="600" height="220"></canvas>
+                        <div class="signature-actions">
+                            <button type="button" id="incident-clear" class="btn-secondary">Clear</button>
+                            <button type="button" id="incident-lock" class="btn-primary">Signature</button>
+                        </div>
+                        <p class="hint">Sign, then press <b>Signature</b> to lock it.</p>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <button type="submit" class="btn-primary">Submit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Worksite Inspection Screen -->
+    <div id="inspection-screen" class="screen" style="display:none;">
+        <div class="header">
+            <h1>Worksite Inspection</h1>
+            <button id="inspection-back" class="btn-secondary">Back</button>
+        </div>
+
+        <div class="container">
+            <form id="inspection-form">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Date</label>
+                        <input type="date" id="inspection-date" required>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Job</label>
+                        <select id="inspection-job" required></select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Inspector</label>
+                    <input type="text" id="inspection-inspector" placeholder="Full name" required>
+                </div>
+
+                <h3>Checklist</h3>
+                <p class="hint">Choose OK / Issue / N/A. Add notes if needed.</p>
+
+                <div id="inspection-checklist"></div>
+
+                <h3>Findings / Corrective Actions</h3>
+                <p class="hint">Add any issues that require follow-up.</p>
+
+                <div id="inspection-findings"></div>
+                <button type="button" id="inspection-add-finding" class="btn-secondary">Add Finding</button>
+
+                <div class="form-group" style="margin-top:14px;">
+                    <label>Photos (optional)</label>
+                    <input id="inspection-photos" type="file" accept="image/*" capture="environment" multiple>
+                    <div id="inspection-photo-preview" class="photo-preview"></div>
+                    <p class="hint">Up to 6 photos. Photos will be compressed for storage/PDF.</p>
+                </div>
+
+                <div class="form-group" style="margin-top:14px;">
+                    <label>Signature</label>
+                    <div class="signature-wrap">
+                        <canvas id="inspection-signature" class="signature-pad" width="600" height="220"></canvas>
+                        <div class="signature-actions">
+                            <button type="button" id="inspection-clear" class="btn-secondary">Clear</button>
+                            <button type="button" id="inspection-lock" class="btn-primary">Signature</button>
+                        </div>
+                        <p class="hint">Sign, then press <b>Signature</b> to lock it.</p>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <button type="submit" class="btn-primary">Submit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Scripts -->
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
@@ -373,6 +638,8 @@
     <script src="email-sender.js"></script>
     <script src="admin.js"></script>
     <script src="form.js"></script>
+    <script src="incident.js"></script>
+    <script src="inspection.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

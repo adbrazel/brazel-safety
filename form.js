@@ -296,7 +296,7 @@ class FormController {
             ` : ''}
             <div class="matrix-controls">
                 <label>Corrective Action / Controls *</label>
-                <textarea name="controls" rows="3" required>${this.escapeHtml(controls)}</textarea>
+                <textarea name="controls" rows="3" ${isBlank ? "" : "required"}>${this.escapeHtml(controls)}</textarea>
             </div>
             ${isBlank ? `
                 <div class="matrix-actions">
@@ -340,6 +340,7 @@ class FormController {
                 <canvas class="signature-pad" width="300" height="120"></canvas>
                 <div class="signature-actions">
                     <button type="button" class="btn-clear-signature" onclick="formController.clearSignature(${index})">Clear</button>
+                    <button type="button" class="btn-lock-signature" onclick="formController.lockSignature(${index})">Signature</button>
                 </div>
             </div>
             ${!isFirstAttendee ? `
@@ -373,18 +374,64 @@ class FormController {
         this.attendees.push({
             index,
             isSupervisor: isFirstAttendee,
-            signaturePad
+            signaturePad,
+            signatureCanvas: canvas,
+            signatureLocked: false,
+            lockedSignature: null
         });
     }
 
     clearSignature(index) {
         const attendee = this.attendees[index];
         if (attendee && attendee.signaturePad) {
+            if (attendee.signatureLocked) {
+                alert('Signature is locked.');
+                return;
+            }
             attendee.signaturePad.clear();
         }
     }
 
-    removeAttendee(index) {
+    
+    lockSignature(index) {
+        const attendee = this.attendees[index];
+        if (!attendee || !attendee.signaturePad) return;
+
+        if (attendee.signatureLocked) return;
+
+        if (attendee.signaturePad.isEmpty()) {
+            alert('Please sign before locking.');
+            return;
+        }
+
+        // Save a snapshot of the signature
+        attendee.lockedSignature = attendee.signaturePad.toDataURL();
+        attendee.signatureLocked = true;
+
+        // Disable drawing to prevent accidental changes
+        try {
+            attendee.signaturePad.off();
+        } catch (e) {
+            // ignore if not supported
+        }
+        if (attendee.signatureCanvas) {
+            attendee.signatureCanvas.style.pointerEvents = 'none';
+        }
+
+        // Disable buttons in this row
+        const row = document.getElementById(`attendee-${index}`);
+        if (row) {
+            const clearBtn = row.querySelector('.btn-clear-signature');
+            const lockBtn = row.querySelector('.btn-lock-signature');
+            if (clearBtn) clearBtn.disabled = true;
+            if (lockBtn) {
+                lockBtn.disabled = true;
+                lockBtn.textContent = 'Locked';
+            }
+        }
+    }
+
+removeAttendee(index) {
         const row = document.getElementById(`attendee-${index}`);
         if (row) {
             row.remove();
@@ -508,7 +555,9 @@ class FormController {
             if (!name.trim()) continue;
             
             let signature = null;
-            if (attendee.signaturePad && !attendee.signaturePad.isEmpty()) {
+            if (attendee.lockedSignature) {
+                signature = attendee.lockedSignature;
+            } else if (attendee.signaturePad && !attendee.signaturePad.isEmpty()) {
                 signature = attendee.signaturePad.toDataURL();
             }
             
@@ -560,6 +609,13 @@ class FormController {
     async submitForm() {
         try {
             const formData = await this.collectFormData();
+
+            // Initial local save (so the form isn't lost even if the browser closes mid-submit)
+            formData.submitted = false;
+            formData.submittedAt = null;
+            formData.emailSent = formData.emailSent ?? false;
+            formData.cloudSaved = formData.cloudSaved ?? null;
+            await storage.saveForm(formData);
             
             // Generate PDF
             const pdfDoc = await pdfGenerator.generateHazardAssessmentPDF(formData);
@@ -570,6 +626,46 @@ class FormController {
                 formData.date,
                 formData.attendees[0]?.name || 'Unknown'
             );
+
+            // --- Cloud backup + cloud save (runs BEFORE emailing) ---
+            // Goal: even if email fails, the PDF and form are preserved in Supabase.
+            if (navigator.onLine && storage.cloudReady) {
+                try {
+                    const pdfBlob = pdfDoc.output('blob');
+                    const pdfUrl = await storage.uploadFormPDF(pdfBlob, filename);
+                    if (pdfUrl) {
+                        formData.pdfUrl = pdfUrl;
+                        formData.pdfFilename = filename;
+                    }
+                    formData.cloudBackup = true;
+                    formData.cloudBackupAt = new Date().toISOString();
+                    formData.cloudBackupError = null;
+                } catch (e) {
+                    console.warn('⚠️ PDF cloud backup failed:', e);
+                    formData.cloudBackup = false;
+                    formData.cloudBackupAt = null;
+                    formData.cloudBackupError = e?.message || String(e);
+                }
+
+                try {
+                    const cloud = await storage.saveFormToCloud(formData);
+                    if (cloud.success) {
+                        formData.cloudSaved = true;
+                        formData.cloudSavedAt = new Date().toISOString();
+                        formData.cloudError = null;
+                        if (cloud.data && cloud.data.id) formData.cloudId = cloud.data.id;
+                    } else {
+                        formData.cloudSaved = false;
+                        formData.cloudSavedAt = null;
+                        formData.cloudError = cloud.error || 'Unknown cloud save error';
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Cloud save failed:', e);
+                    formData.cloudSaved = false;
+                    formData.cloudSavedAt = null;
+                    formData.cloudError = e?.message || String(e);
+                }
+            }
             
             // Upload PDF to cloud storage if available
             let pdfUrl = null;
@@ -661,6 +757,13 @@ class FormController {
     async saveDraft() {
         try {
             const formData = await this.collectFormData();
+
+            // Initial local save (so the form isn't lost even if the browser closes mid-submit)
+            formData.submitted = false;
+            formData.submittedAt = null;
+            formData.emailSent = formData.emailSent ?? false;
+            formData.cloudSaved = formData.cloudSaved ?? null;
+            await storage.saveForm(formData);
             formData.submitted = false;
             
             if (this.currentForm) {

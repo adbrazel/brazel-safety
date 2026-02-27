@@ -575,6 +575,284 @@ class AdminController {
             .replace(/'/g, '&#039;');
     }
 
+
+// -----------------------------
+// Monthly Reporting (Supabase forms)
+// -----------------------------
+async initReporting() {
+    const monthEl = document.getElementById('report-month');
+    const refreshBtn = document.getElementById('report-refresh');
+    const exportBtn = document.getElementById('report-export');
+
+    if (!monthEl || !refreshBtn || !exportBtn) return;
+
+    // Default to current month
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    monthEl.value = ym;
+
+    refreshBtn.addEventListener('click', async () => {
+        await this.refreshReport();
+    });
+
+    exportBtn.addEventListener('click', async () => {
+        await this.exportReportCsv();
+    });
+
+    await this.refreshReport();
+}
+
+getReportMonthRange() {
+    const monthEl = document.getElementById('report-month');
+    const val = (monthEl && monthEl.value) ? monthEl.value : null;
+    if (!val) return null;
+    const [y, m] = val.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m-1, 1, 0,0,0));
+    const end = new Date(Date.UTC(y, m, 1, 0,0,0)); // next month
+    return { startIso: start.toISOString(), endIso: end.toISOString(), y, m };
+}
+
+async fetchFormsForMonth() {
+    if (!navigator.onLine || !storage.cloudReady || !window.supabaseClient) {
+        throw new Error('Reporting requires internet connection.');
+    }
+    const range = this.getReportMonthRange();
+    if (!range) throw new Error('Select a month.');
+    const { data, error } = await supabaseClient
+        .from('forms')
+        .select('id, created_at, job_name, supervisor_name, pdf_url, email_sent, data')
+        .gte('created_at', range.startIso)
+        .lt('created_at', range.endIso)
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+}
+    summarizeForms(rows) {
+        const formsCount = rows.length;
+
+        let attendeeTotal = 0;
+        const uniqueEmployees = new Set();
+        const uniqueJobs = new Set();
+
+        const employeeCounts = new Map();   // name -> forms attended
+        const jobCounts = new Map();        // job -> forms count
+        const hazardCounts = new Map();     // hazard -> count
+        const supervisorCounts = new Map(); // supervisor -> { forms, emailed }
+
+        const bump = (map, key, inc=1) => {
+            const k = (key || '').toString().trim();
+            if (!k) return;
+            map.set(k, (map.get(k) || 0) + inc);
+        };
+
+        for (const r of rows) {
+            const data = r.data || {};
+
+            const job = r.job_name || data.jobName || data.job_name || '';
+            if (job) {
+                uniqueJobs.add(job);
+                bump(jobCounts, job, 1);
+            }
+
+            const sup = r.supervisor_name || data.supervisorName || data.supervisor_name || '';
+            if (sup) {
+                if (!supervisorCounts.has(sup)) supervisorCounts.set(sup, { supervisor: sup, forms: 0, emailed: 0 });
+                const obj = supervisorCounts.get(sup);
+                obj.forms += 1;
+                if (r.email_sent) obj.emailed += 1;
+            }
+
+            const attendees = Array.isArray(data.attendees) ? data.attendees : [];
+            attendeeTotal += attendees.length;
+
+            for (const a of attendees) {
+                const name = (a && a.name) ? String(a.name).trim() : '';
+                if (!name) continue;
+                uniqueEmployees.add(name.toLowerCase());
+                employeeCounts.set(name, (employeeCounts.get(name) || 0) + 1);
+            }
+
+            const hm = Array.isArray(data.hazardMatrix) ? data.hazardMatrix : [];
+            for (const row of hm) {
+                const hz = (row && (row.hazard || row.hazardName)) ? String(row.hazard || row.hazardName).trim() : '';
+                if (hz) hazardCounts.set(hz, (hazardCounts.get(hz) || 0) + 1);
+            }
+        }
+
+        const topEmployees = Array.from(employeeCounts.entries())
+            .map(([employee, forms]) => ({ employee, forms }))
+            .sort((a,b) => b.forms - a.forms || a.employee.localeCompare(b.employee))
+            .slice(0, 25);
+
+        const topJobs = Array.from(jobCounts.entries())
+            .map(([job, forms]) => ({ job, forms }))
+            .sort((a,b) => b.forms - a.forms || a.job.localeCompare(b.job))
+            .slice(0, 25);
+
+        const topHazards = Array.from(hazardCounts.entries())
+            .map(([hazard, count]) => ({ hazard, count }))
+            .sort((a,b) => b.count - a.count || a.hazard.localeCompare(b.hazard))
+            .slice(0, 25);
+
+        const supervisorStats = Array.from(supervisorCounts.values())
+            .map(s => ({ supervisor: s.supervisor, forms: String(s.forms), emailed: `${s.emailed}/${s.forms}` }))
+            .sort((a,b) => parseInt(b.forms,10) - parseInt(a.forms,10) || a.supervisor.localeCompare(b.supervisor));
+
+        return {
+            formsCount,
+            attendeeTotal,
+            uniqueEmployees: uniqueEmployees.size,
+            uniqueJobs: uniqueJobs.size,
+            topEmployees,
+            topJobs,
+            topHazards,
+            supervisorStats
+        };
+    }
+        }
+    }
+
+    return {
+        formsCount,
+        attendeeTotal,
+        uniqueEmployees: uniqueEmployees.size,
+        uniqueJobs: uniqueJobs.size
+    };
+}
+
+async refreshReport() {
+    const setText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    };
+
+    try {
+        setText('report-forms', '…');
+        setText('report-attendees', '…');
+        setText('report-unique', '…');
+        setText('report-jobs', '…');
+        const tbody = document.getElementById('report-rows');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+
+        const rows = await this.fetchFormsForMonth();
+        const s = this.summarizeForms(rows);
+
+        setText('report-forms', String(s.formsCount));
+        setText('report-attendees', String(s.attendeeTotal));
+        setText('report-unique', String(s.uniqueEmployees));
+        setText('report-jobs', String(s.uniqueJobs));
+
+            // Breakdown tables
+            this.renderSimpleTable('report-employee-rows', s.topEmployees, ['employee','forms']);
+            this.renderSimpleTable('report-job-rows', s.topJobs, ['job','forms']);
+            this.renderSimpleTable('report-hazard-rows', s.topHazards, ['hazard','count']);
+            this.renderSimpleTable('report-supervisor-rows', s.supervisorStats, ['supervisor','forms','emailed']);
+
+        if (tbody) {
+            tbody.innerHTML = '';
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="6">No forms found for this month.</td></tr>';
+            } else {
+                for (const r of rows) {
+                    const dt = r.created_at ? new Date(r.created_at) : null;
+                    const dateStr = dt ? dt.toLocaleString() : '';
+                    const job = r.job_name || (r.data && (r.data.jobName || r.data.job_name)) || '';
+                    const sup = r.supervisor_name || (r.data && (r.data.supervisorName || r.data.supervisor_name)) || '';
+                    const attendees = (r.data && Array.isArray(r.data.attendees)) ? r.data.attendees.length : 0;
+                    const email = r.email_sent ? 'Yes' : 'No';
+                    const pdf = r.pdf_url ? `<a class="report-link" href="${this.escapeHtml(r.pdf_url)}" target="_blank">Open</a>` : '';
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${this.escapeHtml(dateStr)}</td>
+                        <td>${this.escapeHtml(job)}</td>
+                        <td>${this.escapeHtml(sup)}</td>
+                        <td>${attendees}</td>
+                        <td>${email}</td>
+                        <td>${pdf}</td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('❌ Report error:', err);
+        alert('Reporting error: ' + (err?.message || err));
+        const tbody = document.getElementById('report-rows');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6">Error loading report.</td></tr>';
+    }
+}
+
+async exportReportCsv() {
+    try {
+        const rows = await this.fetchFormsForMonth();
+        const header = ['created_at','job','supervisor','attendees','email_sent','pdf_url'];
+        const lines = [header.join(',')];
+
+        for (const r of rows) {
+            const job = r.job_name || (r.data && (r.data.jobName || r.data.job_name)) || '';
+            const sup = r.supervisor_name || (r.data && (r.data.supervisorName || r.data.supervisor_name)) || '';
+            const attendees = (r.data && Array.isArray(r.data.attendees)) ? r.data.attendees.length : 0;
+            const vals = [
+                r.created_at || '',
+                job,
+                sup,
+                String(attendees),
+                r.email_sent ? 'true' : 'false',
+                r.pdf_url || ''
+            ].map(v => `"${String(v).replace(/"/g,'""')}"`);
+            lines.push(vals.join(','));
+        }
+
+        const csv = lines.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const range = this.getReportMonthRange();
+        const filename = range ? `report_${range.y}-${String(range.m).padStart(2,'0')}.csv` : 'report.csv';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error('❌ Export error:', err);
+        alert('Export error: ' + (err?.message || err));
+    }
+}
+
+
+    buildFrequencyMap(items, normalizer=null) {
+        const m = new Map();
+        for (const it of items) {
+            const keyRaw = (normalizer ? normalizer(it) : it);
+            const key = (keyRaw ?? '').toString().trim();
+            if (!key) continue;
+            const k = key.toLowerCase();
+            m.set(k, { label: key, count: (m.get(k)?.count || 0) + 1 });
+        }
+        return m;
+    }
+
+    renderSimpleTable(tbodyId, rows, cols) {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!rows.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="${cols.length}">No data</td>`;
+            tbody.appendChild(tr);
+            return;
+        }
+        for (const r of rows) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = cols.map(c => `<td>${this.escapeHtml(r[c] ?? '')}</td>`).join('');
+            tbody.appendChild(tr);
+        }
+    }
+
 }
 
 // Create global instance
