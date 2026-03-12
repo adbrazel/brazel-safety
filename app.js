@@ -469,7 +469,6 @@ class App {
             meta.className = 'form-meta';
 
             const badges = [];
-            if (f.formType) badges.push(`<span class="badge">${this.escapeHtml(f.formType)}</span>`);
             if (f.emailSent) badges.push('<span class="badge badge-ok">📧 emailed</span>');
             else badges.push('<span class="badge badge-warn">⏳ pending</span>');
             if (f.pdfUrl) badges.push('<span class="badge">☁️ pdf linked</span>');
