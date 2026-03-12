@@ -20,9 +20,8 @@ class App {
             console.log('⏳ Initializing storage...');
             await storage.init();
             console.log('✅ Storage initialized');
-            if (storage.fallbackMode) {
-                console.warn('⚠️ App is running in localStorage fallback mode');
-            }
+            const sm = document.getElementById('storage-mode');
+            if (sm) sm.textContent = `Storage: ${storage.mode}`;
             
             // Initialize default safety topics if needed
             console.log('⏳ Initializing safety topics...');
@@ -38,6 +37,8 @@ class App {
             console.log('⏳ Initializing controllers...');
             await adminController.init();
             await formController.init();
+            if (window.incidentController) await window.incidentController.init();
+            if (window.inspectionController) await window.inspectionController.init();
             console.log('✅ Controllers initialized');
             await this.initResourcesScreen();
             await this.initSavedFormsScreen();
@@ -85,32 +86,20 @@ class App {
                 safariPrivateMode = true;
             }
             
-            let errorMsg = `Error initializing app: Unable to open database file on disk\n\n`;
-            
-            if (safariPrivateMode || error.message?.includes('denied') || error.message?.includes('blocked')) {
-                errorMsg += `⚠️ SAFARI PRIVATE MODE OR STRICT PRIVACY DETECTED\n\n`;
-                errorMsg += `This app requires local storage which is blocked in:\n`;
-                errorMsg += `• Safari Private Browsing mode\n`;
-                errorMsg += `• DuckDuckGo browser\n`;
-                errorMsg += `• Browsers with strict privacy settings\n\n`;
-                errorMsg += `QUICK FIX:\n`;
-                errorMsg += `1. ✅ Turn OFF private browsing for this site\n`;
-                errorMsg += `2. ✅ Disable DuckDuckGo / privacy shields for this site\n`;
-                errorMsg += `3. ✅ In Safari Settings → Privacy → Allow storage\n\n`;
-            } else {
-                errorMsg += `This could be due to:\n`;
-                errorMsg += `- Browser blocking IndexedDB storage\n`;
-                errorMsg += `- Ad blocker blocking external libraries\n`;
-                errorMsg += `- Browser privacy settings\n\n`;
-                errorMsg += `Please try:\n`;
-                errorMsg += `1. Use Google Chrome\n`;
-                errorMsg += `2. Disable ad blockers\n`;
-                errorMsg += `3. Check browser console (F12) for details\n`;
-                errorMsg += `4. Try a different browser\n\n`;
-            }
-            
-            errorMsg += `Contact: Aaron Brazel - (403) 669-2900`;
-            
+            let errorMsg = `Error initializing app.
+
+`;
+            errorMsg += `Storage mode fallback could not start in this browser.
+`;
+            errorMsg += `Please try these steps:
+`;
+            errorMsg += `1. Open the site in a regular (non-private) browser tab
+`;
+            errorMsg += `2. Close and reopen the browser
+`;
+            errorMsg += `3. Try Chrome or Edge if available
+`;
+            errorMsg += `4. Contact Aaron Brazel - (403) 669-2900 if it still fails`;
             alert(errorMsg);
         }
     }
@@ -245,15 +234,26 @@ class App {
     }
 
     async registerServiceWorker() {
+        // Clean reset package: unregister any old service workers so stale cached JS stops breaking the app.
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.register('/service-worker.js');
-                console.log('Service Worker registered:', registration);
+                const regs = await navigator.serviceWorker.getRegistrations();
+                for (const reg of regs) {
+                    await reg.unregister();
+                }
             } catch (error) {
-                console.log('Service Worker registration failed:', error);
-                // Non-critical, continue anyway
+                console.warn('Service worker cleanup failed:', error);
             }
         }
+        if ('caches' in window) {
+            try {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(key => caches.delete(key)));
+            } catch (error) {
+                console.warn('Cache cleanup failed:', error);
+            }
+        }
+        return true;
     }
 
     // Install prompt for PWA
