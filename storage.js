@@ -443,6 +443,34 @@ class StorageManager {
             return { success: false, error: err?.message || String(err) };
         }
     }
+
+    async uploadFormPhoto(photoBlob, filename) {
+        if (!this.cloudReady) return null;
+        try {
+            console.log('☁️ Uploading photo:', filename);
+            const result = await db.uploadFile('forms', `photos/${filename}`, photoBlob);
+            return result.publicUrl;
+        } catch (error) {
+            console.error('❌ Photo upload failed:', error);
+            return null;
+        }
+    }
+
+    async uploadMultiplePhotos(photos, baseName) {
+        // photos: [{blob, ext}]
+        const urls = [];
+        if (!this.cloudReady) return urls;
+        let i = 1;
+        for (const p of photos) {
+            const ext = p.ext || 'jpg';
+            const fname = `${baseName}_photo${i}.${ext}`;
+            const url = await this.uploadFormPhoto(p.blob, fname);
+            if (url) urls.push(url);
+            i += 1;
+        }
+        return urls;
+    }
+
 }
 
 // Create global instance
