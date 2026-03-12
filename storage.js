@@ -351,9 +351,9 @@ class StorageManager {
         
         try {
             console.log('☁️ Uploading PDF to cloud storage:', filename);
-            const result = await db.uploadFile('form-photos', `pdfs/${filename}`, pdfBlob);
-            console.log('✅ PDF uploaded to cloud:', result.url);
-            return result.url;
+            const result = await db.uploadFile('forms', `pdfs/${filename}`, pdfBlob);
+            console.log('✅ PDF uploaded to cloud:', result.publicUrl);
+            return result.publicUrl;
         } catch (error) {
             console.error('❌ PDF upload failed:', error);
             return null;
@@ -443,6 +443,34 @@ class StorageManager {
             return { success: false, error: err?.message || String(err) };
         }
     }
+
+    async uploadFormPhoto(photoBlob, filename) {
+        if (!this.cloudReady) return null;
+        try {
+            console.log('☁️ Uploading photo:', filename);
+            const result = await db.uploadFile('forms', `photos/${filename}`, photoBlob);
+            return result.publicUrl;
+        } catch (error) {
+            console.error('❌ Photo upload failed:', error);
+            return null;
+        }
+    }
+
+    async uploadMultiplePhotos(photos, baseName) {
+        // photos: [{blob, ext}]
+        const urls = [];
+        if (!this.cloudReady) return urls;
+        let i = 1;
+        for (const p of photos) {
+            const ext = p.ext || 'jpg';
+            const fname = `${baseName}_photo${i}.${ext}`;
+            const url = await this.uploadFormPhoto(p.blob, fname);
+            if (url) urls.push(url);
+            i += 1;
+        }
+        return urls;
+    }
+
 }
 
 // Create global instance
