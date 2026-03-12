@@ -20,6 +20,9 @@ class App {
             console.log('⏳ Initializing storage...');
             await storage.init();
             console.log('✅ Storage initialized');
+            if (storage.fallbackMode) {
+                console.warn('⚠️ App is running in localStorage fallback mode');
+            }
             
             // Initialize default safety topics if needed
             console.log('⏳ Initializing safety topics...');
@@ -91,8 +94,8 @@ class App {
                 errorMsg += `• DuckDuckGo browser\n`;
                 errorMsg += `• Browsers with strict privacy settings\n\n`;
                 errorMsg += `QUICK FIX:\n`;
-                errorMsg += `1. ✅ Use Google Chrome (works best)\n`;
-                errorMsg += `2. ✅ Use regular Safari (not private mode)\n`;
+                errorMsg += `1. ✅ Turn OFF private browsing for this site\n`;
+                errorMsg += `2. ✅ Disable DuckDuckGo / privacy shields for this site\n`;
                 errorMsg += `3. ✅ In Safari Settings → Privacy → Allow storage\n\n`;
             } else {
                 errorMsg += `This could be due to:\n`;

@@ -6,6 +6,9 @@ class StorageManager {
         this.db = null;
         this.useCloud = false;
         this.cloudReady = false;
+        this.fallbackMode = false;
+        this.lsPrefix = 'BrazelSafetyFallback';
+        this.stores = ['jobs', 'hazards', 'safety_topics', 'resources', 'forms', 'settings'];
     }
 
     async init() {
@@ -108,6 +111,55 @@ class StorageManager {
         });
     }
 
+
+    initLocalStorageFallback() {
+        this.fallbackMode = true;
+        this.db = { fallback: true };
+        console.log('📦 Using localStorage fallback mode');
+
+        for (const storeName of this.stores) {
+            const key = this.getLocalStoreKey(storeName);
+            if (localStorage.getItem(key) === null) {
+                localStorage.setItem(key, storeName === 'settings' ? JSON.stringify({}) : JSON.stringify([]));
+            }
+            if (storeName !== 'settings') {
+                const counterKey = this.getCounterKey(storeName);
+                if (localStorage.getItem(counterKey) === null) {
+                    localStorage.setItem(counterKey, '1');
+                }
+            }
+        }
+    }
+
+    getLocalStoreKey(storeName) {
+        return `${this.lsPrefix}:${storeName}`;
+    }
+
+    getCounterKey(storeName) {
+        return `${this.lsPrefix}:${storeName}:counter`;
+    }
+
+    readLocalStore(storeName) {
+        const raw = localStorage.getItem(this.getLocalStoreKey(storeName));
+        if (!raw) return storeName === 'settings' ? {} : [];
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            return storeName === 'settings' ? {} : [];
+        }
+    }
+
+    writeLocalStore(storeName, value) {
+        localStorage.setItem(this.getLocalStoreKey(storeName), JSON.stringify(value));
+    }
+
+    nextLocalId(storeName) {
+        const key = this.getCounterKey(storeName);
+        const current = parseInt(localStorage.getItem(key) || '1', 10);
+        localStorage.setItem(key, String(current + 1));
+        return current;
+    }
+
     async initSupabase() {
         try {
             if (typeof initSupabase === 'function') {
@@ -187,7 +239,22 @@ class StorageManager {
         }
     }
 
-    async addWithId(storeName, data) {
+async addWithId(storeName, data) {
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                settings[data.key] = data.value;
+                this.writeLocalStore('settings', settings);
+                return data.key;
+            }
+            const items = this.readLocalStore(storeName);
+            const idx = items.findIndex(item => String(item.id) === String(data.id));
+            if (idx >= 0) items[idx] = data;
+            else items.push(data);
+            this.writeLocalStore(storeName, items);
+            return data.id;
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction([storeName], 'readwrite');
             const store = transaction.objectStore(storeName);
@@ -199,17 +266,32 @@ class StorageManager {
     }
 
     // Generic CRUD operations with cloud sync
-    async add(storeName, data) {
+async add(storeName, data) {
         // Add to local storage first
-        const localId = await new Promise((resolve, reject) => {
-            const transaction = this.db.transaction([storeName], 'readwrite');
-            const store = transaction.objectStore(storeName);
-            const request = store.add(data);
+        let localId;
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                settings[data.key] = data.value;
+                this.writeLocalStore('settings', settings);
+                localId = data.key;
+            } else {
+                const items = this.readLocalStore(storeName);
+                localId = data.id ?? this.nextLocalId(storeName);
+                items.push({ ...data, id: localId });
+                this.writeLocalStore(storeName, items);
+            }
+        } else {
+            localId = await new Promise((resolve, reject) => {
+                const transaction = this.db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.add(data);
 
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-        
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
         // Try to sync to cloud for admin data
         if (this.cloudReady && this.isAdminData(storeName)) {
             try {
@@ -220,21 +302,37 @@ class StorageManager {
                 console.warn(`⚠️ Cloud sync failed for ${storeName}, saved locally:`, error);
             }
         }
-        
+
         return localId;
     }
 
-    async update(storeName, data) {
-        // Update local storage first
-        const result = await new Promise((resolve, reject) => {
-            const transaction = this.db.transaction([storeName], 'readwrite');
-            const store = transaction.objectStore(storeName);
-            const request = store.put(data);
+async update(storeName, data) {
+        let result;
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                settings[data.key] = data.value;
+                this.writeLocalStore('settings', settings);
+                result = data.key;
+            } else {
+                const items = this.readLocalStore(storeName);
+                const idx = items.findIndex(item => String(item.id) === String(data.id));
+                if (idx >= 0) items[idx] = data;
+                else items.push(data);
+                this.writeLocalStore(storeName, items);
+                result = data.id;
+            }
+        } else {
+            result = await new Promise((resolve, reject) => {
+                const transaction = this.db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.put(data);
 
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-        
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
         // Try to sync to cloud for admin data
         if (this.cloudReady && this.isAdminData(storeName)) {
             try {
@@ -244,11 +342,20 @@ class StorageManager {
                 console.warn(`⚠️ Cloud update failed for ${storeName}:`, error);
             }
         }
-        
+
         return result;
     }
 
-    async get(storeName, id) {
+async get(storeName, id) {
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                return settings[id] !== undefined ? { key: id, value: settings[id] } : undefined;
+            }
+            const items = this.readLocalStore(storeName);
+            return items.find(item => String(item.id) === String(id));
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction([storeName], 'readonly');
             const store = transaction.objectStore(storeName);
@@ -259,7 +366,15 @@ class StorageManager {
         });
     }
 
-    async getAll(storeName) {
+async getAll(storeName) {
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                return Object.entries(settings).map(([key, value]) => ({ key, value }));
+            }
+            return this.readLocalStore(storeName);
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction([storeName], 'readonly');
             const store = transaction.objectStore(storeName);
@@ -270,17 +385,28 @@ class StorageManager {
         });
     }
 
-    async delete(storeName, id) {
-        // Delete from local storage first
-        await new Promise((resolve, reject) => {
-            const transaction = this.db.transaction([storeName], 'readwrite');
-            const store = transaction.objectStore(storeName);
-            const request = store.delete(id);
+async delete(storeName, id) {
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                delete settings[id];
+                this.writeLocalStore('settings', settings);
+            } else {
+                const items = this.readLocalStore(storeName)
+                    .filter(item => String(item.id) !== String(id));
+                this.writeLocalStore(storeName, items);
+            }
+        } else {
+            await new Promise((resolve, reject) => {
+                const transaction = this.db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.delete(id);
 
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
-        
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
         // Try to delete from cloud for admin data
         if (this.cloudReady && this.isAdminData(storeName)) {
             try {
@@ -469,6 +595,33 @@ class StorageManager {
             i += 1;
         }
         return urls;
+    }
+
+
+    async saveForm(formData) {
+        if (formData.id) {
+            await this.update('forms', formData);
+            return formData.id;
+        }
+        const id = await this.add('forms', formData);
+        formData.id = id;
+        return id;
+    }
+
+    async getJobs() {
+        return await this.getAll('jobs');
+    }
+
+    async getHazards() {
+        return await this.getAll('hazards');
+    }
+
+    async getSafetyTopics() {
+        return await this.getAll('safety_topics');
+    }
+
+    async getResources() {
+        return await this.getAll('resources');
     }
 
 }
