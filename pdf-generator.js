@@ -319,6 +319,204 @@ class PDFGenerator {
         return y;
     }
 
+    // Wrap helper for paragraphs
+    writeWrappedText(doc, text, x, y, maxWidth, lineHeight) {
+        const t = (text || '').toString();
+        const lines = doc.splitTextToSize(t, maxWidth);
+        for (const ln of lines) {
+            if (y > 280) { doc.addPage(); y = 20; }
+            doc.text(ln, x, y);
+            y += lineHeight;
+        }
+        return y;
+    }
+
+    async renderPhotoSection(doc, photos, startY) {
+        let y = startY;
+        const list = Array.isArray(photos) ? photos : [];
+        if (!list.length) return y;
+
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.text('Photos', 14, y);
+        y += 6;
+        doc.setFont(undefined, 'normal');
+
+        for (let i = 0; i < list.length; i++) {
+            const p = list[i];
+            if (!p || !p.dataUrl) continue;
+            if (y > 240) { doc.addPage(); y = 20; }
+            doc.setFontSize(10);
+            doc.text(`Photo ${i+1}`, 14, y);
+            y += 4;
+            try {
+                doc.addImage(p.dataUrl, 'JPEG', 14, y, 180, 120);
+                y += 128;
+            } catch (e) {
+                console.warn('Photo addImage failed', e);
+                y += 6;
+            }
+        }
+        return y;
+    }
+
+    async generateIncidentPDF(data) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        let y = 18;
+
+        doc.setFillColor(220, 53, 69);
+        doc.rect(14, 12, 182, 14, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont(undefined, 'bold');
+        doc.setFontSize(16);
+        doc.text('INCIDENT / NEAR MISS REPORT', 105, 21, { align: 'center' });
+
+        y = 34;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'normal');
+        const topLines = [
+            `Date: ${data.date || ''} ${data.time ? (' ' + data.time) : ''}`,
+            `Job: ${data.jobName || ''}`,
+            `Location: ${data.location || ''}`,
+            `Reported by: ${data.reporter || ''}`,
+            `Supervisor: ${data.supervisor || ''}`,
+            `Type: ${data.incidentType || ''}`,
+            `Classification: ${data.classification || ''}`,
+            `Reported to Alberta OHS: ${data.reportedToOHS || ''}`,
+            `Injury: ${data.injury || 'No'}`,
+            `Involved worker: ${data.involvedWorker || ''}`,
+            `Equipment: ${data.equipment || ''}`
+        ];
+        for (const line of topLines) {
+            y = this.writeWrappedText(doc, line, 14, y, 180, 6);
+        }
+
+        y += 3;
+        doc.setFont(undefined, 'bold');
+        doc.text('What happened?', 14, y);
+        y += 6;
+        doc.setFont(undefined, 'normal');
+        y = this.writeWrappedText(doc, data.description || '', 14, y, 180, 6);
+
+        y += 4;
+        doc.setFont(undefined, 'bold');
+        doc.text('Immediate actions taken', 14, y);
+        y += 6;
+        doc.setFont(undefined, 'normal');
+        y = this.writeWrappedText(doc, data.actions || '', 14, y, 180, 6);
+
+        if (data.rootCauses) {
+            y += 4;
+            doc.setFont(undefined, 'bold');
+            doc.text('Root cause(s)', 14, y);
+            y += 6;
+            doc.setFont(undefined, 'normal');
+            y = this.writeWrappedText(doc, data.rootCauses, 14, y, 180, 6);
+        }
+
+        if (data.correctiveActions) {
+            y += 4;
+            doc.setFont(undefined, 'bold');
+            doc.text('Corrective actions', 14, y);
+            y += 6;
+            doc.setFont(undefined, 'normal');
+            y = this.writeWrappedText(doc, data.correctiveActions, 14, y, 180, 6);
+        }
+
+        if (data.witnesses) {
+            y += 4;
+            doc.setFont(undefined, 'bold');
+            doc.text('Witnesses', 14, y);
+            y += 6;
+            doc.setFont(undefined, 'normal');
+            y = this.writeWrappedText(doc, data.witnesses, 14, y, 180, 6);
+        }
+
+        y = await this.renderPhotoSection(doc, data.photos, y + 4);
+
+        if (data.signature) {
+            if (y > 240) { doc.addPage(); y = 20; }
+            doc.setFont(undefined, 'bold');
+            doc.text('Signature', 14, y);
+            y += 4;
+            try {
+                doc.addImage(data.signature, 'PNG', 14, y, 80, 30);
+            } catch (e) {
+                console.warn('Signature addImage failed', e);
+            }
+        }
+
+        return doc;
+    }
+
+    async generateInspectionPDF(data) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        let y = 18;
+
+        doc.setFillColor(220, 53, 69);
+        doc.rect(14, 12, 182, 14, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont(undefined, 'bold');
+        doc.setFontSize(16);
+        doc.text('WORKSITE INSPECTION REPORT', 105, 21, { align: 'center' });
+
+        y = 34;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'normal');
+
+        y = this.writeWrappedText(doc, `Date: ${data.date || ''}`, 14, y, 180, 6);
+        y = this.writeWrappedText(doc, `Job: ${data.jobName || ''}`, 14, y, 180, 6);
+        y = this.writeWrappedText(doc, `Inspector: ${data.inspector || ''}`, 14, y, 180, 6);
+
+        y += 4;
+        doc.setFont(undefined, 'bold');
+        doc.text('Checklist', 14, y);
+        y += 6;
+        doc.setFont(undefined, 'normal');
+        const checklist = Array.isArray(data.checklist) ? data.checklist : [];
+        for (const item of checklist) {
+            const line = `${item.label || item.key}: ${item.status || ''}${item.note ? ' — ' + item.note : ''}`;
+            y = this.writeWrappedText(doc, line, 14, y, 180, 5);
+        }
+
+        y += 4;
+        doc.setFont(undefined, 'bold');
+        doc.text('Findings / Corrective Actions', 14, y);
+        y += 6;
+        doc.setFont(undefined, 'normal');
+        const findings = Array.isArray(data.findings) ? data.findings : [];
+        if (!findings.length) {
+            y = this.writeWrappedText(doc, 'None recorded.', 14, y, 180, 5);
+        } else {
+            let i = 1;
+            for (const f of findings) {
+                const line = `${i}. ${f.finding || ''} | Action: ${f.action || ''} | Owner: ${f.owner || ''} | Due: ${f.due || ''}`;
+                y = this.writeWrappedText(doc, line, 14, y, 180, 5);
+                i += 1;
+            }
+        }
+
+        y = await this.renderPhotoSection(doc, data.photos, y + 4);
+
+        if (data.signature) {
+            if (y > 240) { doc.addPage(); y = 20; }
+            doc.setFont(undefined, 'bold');
+            doc.text('Signature', 14, y);
+            y += 4;
+            try {
+                doc.addImage(data.signature, 'PNG', 14, y, 80, 30);
+            } catch (e) {
+                console.warn('Signature addImage failed', e);
+            }
+        }
+
+        return doc;
+    }
+
     // Generate filename based on job, date, and supervisor
     generateFilename(jobName, date, supervisorName) {
         const cleanJobName = jobName.replace(/[^a-z0-9]/gi, '-');

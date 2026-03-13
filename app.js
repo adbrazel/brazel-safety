@@ -20,9 +20,6 @@ class App {
             console.log('⏳ Initializing storage...');
             await storage.init();
             console.log('✅ Storage initialized');
-            this.showStorageModeBanner();
-            const sm = document.getElementById('storage-mode');
-            if (sm) sm.textContent = `Storage: ${storage.mode}`;
             
             // Initialize default safety topics if needed
             console.log('⏳ Initializing safety topics...');
@@ -604,18 +601,7 @@ class App {
             .replace(/'/g, '&#039;');
     }
     showStorageModeBanner() {
-        let mode = 'indexeddb';
-        if (storage.onlineOnlyMode) mode = 'online';
-        else if (storage.fallbackMode) mode = 'localstorage';
-
-        const existing = document.getElementById('storage-mode-banner');
-        if (existing) existing.remove();
-
-        const banner = document.createElement('div');
-        banner.id = 'storage-mode-banner';
-        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 12px;font-size:14px;text-align:center;background:#111;color:#fff;';
-        banner.textContent = `Storage mode: ${mode}`;
-        document.body.appendChild(banner);
+        return;
     }
 
 }
