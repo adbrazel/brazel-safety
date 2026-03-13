@@ -856,4 +856,4 @@ async exportReportCsv() {
 }
 
 // Create global instance
-const adminController = new AdminController();
+window.adminController = new AdminController();

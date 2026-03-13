@@ -837,4 +837,4 @@ removeAttendee(index) {
 }
 
 // Create global instance
-const formController = new FormController();
+window.formController = new FormController();

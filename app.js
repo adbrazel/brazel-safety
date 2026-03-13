@@ -36,8 +36,10 @@ class App {
             
             // Initialize controllers
             console.log('⏳ Initializing controllers...');
-            await adminController.init();
-            await formController.init();
+            if (!window.adminController) throw new Error('adminController failed to load');
+            await window.adminController.init();
+            if (!window.formController) throw new Error('formController failed to load');
+            await window.formController.init();
             if (window.incidentController) await window.incidentController.init();
             if (window.inspectionController) await window.inspectionController.init();
             console.log('✅ Controllers initialized');
