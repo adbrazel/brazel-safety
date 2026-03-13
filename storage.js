@@ -10,6 +10,8 @@ class StorageManager {
         this.cloudReady = false;
         this.mode = 'indexeddb'; // indexeddb | localstorage | memory
         this.stores = ['jobs', 'hazards', 'safety_topics', 'resources', 'forms', 'settings'];
+        this.onlineOnlyMode = false;
+        this.memoryStore = { jobs: [], hazards: [], safety_topics: [], resources: [], forms: [], settings: {} };
         this.prefix = 'BrazelSafety';
         this.memory = {
             jobs: [],
@@ -87,6 +89,13 @@ class StorageManager {
                 }
             };
         });
+    }
+
+    initOnlineOnlyMode() {
+        this.onlineOnlyMode = true;
+        this.fallbackMode = false;
+        this.db = { onlineOnly: true };
+        console.log('☁️ Using ONLINE-ONLY mode (browser storage unavailable)');
     }
 
     initLocalStorageFallback() {
@@ -202,49 +211,73 @@ class StorageManager {
         return this.addWithId(storeName, data);
     }
 
-    async addWithId(storeName, data) {
-        if (this.mode !== 'indexeddb') {
+async addWithId(storeName, data) {
+        if (this.onlineOnlyMode) {
             if (storeName === 'settings') {
-                const settings = this.readFallbackStore('settings');
-                settings[data.key] = data.value;
-                this.writeFallbackStore('settings', settings);
+                this.memoryStore.settings[data.key] = data.value;
                 return data.key;
             }
-            const items = this.readFallbackStore(storeName);
+            const arr = this.memoryStore[storeName] || [];
+            const idx = arr.findIndex(item => String(item.id) == String(data.id));
+            if (idx >= 0) arr[idx] = data;
+            else arr.push(data);
+            this.memoryStore[storeName] = arr;
+            return data.id;
+        }
+
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                settings[data.key] = data.value;
+                this.writeLocalStore('settings', settings);
+                return data.key;
+            }
+            const items = this.readLocalStore(storeName);
             const idx = items.findIndex(item => String(item.id) === String(data.id));
             if (idx >= 0) items[idx] = data;
             else items.push(data);
-            this.writeFallbackStore(storeName, items);
+            this.writeLocalStore(storeName, items);
             return data.id;
         }
 
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction([storeName], 'readwrite');
-            const store = tx.objectStore(storeName);
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
             const request = store.put(data);
             request.onsuccess = () => resolve(data.id);
             request.onerror = () => reject(request.error);
         });
     }
 
-    async add(storeName, data) {
+async add(storeName, data) {
         let localId;
-        if (this.mode !== 'indexeddb') {
+
+        if (this.onlineOnlyMode) {
             if (storeName === 'settings') {
-                const settings = this.readFallbackStore('settings');
-                settings[data.key] = data.value;
-                this.writeFallbackStore('settings', settings);
+                this.memoryStore.settings[data.key] = data.value;
                 localId = data.key;
             } else {
-                const items = this.readFallbackStore(storeName);
-                localId = data.id ?? this.nextFallbackId(storeName);
+                const arr = this.memoryStore[storeName] || [];
+                localId = data.id ?? (arr.length ? Math.max(...arr.map(x => Number(x.id)||0)) + 1 : 1);
+                arr.push({ ...data, id: localId });
+                this.memoryStore[storeName] = arr;
+            }
+        } else if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                settings[data.key] = data.value;
+                this.writeLocalStore('settings', settings);
+                localId = data.key;
+            } else {
+                const items = this.readLocalStore(storeName);
+                localId = data.id ?? this.nextLocalId(storeName);
                 items.push({ ...data, id: localId });
-                this.writeFallbackStore(storeName, items);
+                this.writeLocalStore(storeName, items);
             }
         } else {
             localId = await new Promise((resolve, reject) => {
-                const tx = this.db.transaction([storeName], 'readwrite');
-                const store = tx.objectStore(storeName);
+                const transaction = this.db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
                 const request = store.add(data);
                 request.onsuccess = () => resolve(request.result);
                 request.onerror = () => reject(request.error);
@@ -253,34 +286,49 @@ class StorageManager {
 
         if (this.cloudReady && this.isAdminData(storeName)) {
             try {
-                await this.addToCloud(storeName, { ...data, id: localId });
+                const dataWithId = { ...data, id: localId };
+                await this.addToCloud(storeName, dataWithId);
+                console.log(`✅ Synced ${storeName} to cloud`);
             } catch (error) {
                 console.warn(`⚠️ Cloud sync failed for ${storeName}, saved locally:`, error);
             }
         }
+
         return localId;
     }
 
-    async update(storeName, data) {
+async update(storeName, data) {
         let result;
-        if (this.mode !== 'indexeddb') {
+        if (this.onlineOnlyMode) {
             if (storeName === 'settings') {
-                const settings = this.readFallbackStore('settings');
-                settings[data.key] = data.value;
-                this.writeFallbackStore('settings', settings);
+                this.memoryStore.settings[data.key] = data.value;
                 result = data.key;
             } else {
-                const items = this.readFallbackStore(storeName);
+                const arr = this.memoryStore[storeName] || [];
+                const idx = arr.findIndex(item => String(item.id) === String(data.id));
+                if (idx >= 0) arr[idx] = data;
+                else arr.push(data);
+                this.memoryStore[storeName] = arr;
+                result = data.id;
+            }
+        } else if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                settings[data.key] = data.value;
+                this.writeLocalStore('settings', settings);
+                result = data.key;
+            } else {
+                const items = this.readLocalStore(storeName);
                 const idx = items.findIndex(item => String(item.id) === String(data.id));
                 if (idx >= 0) items[idx] = data;
                 else items.push(data);
-                this.writeFallbackStore(storeName, items);
+                this.writeLocalStore(storeName, items);
                 result = data.id;
             }
         } else {
             result = await new Promise((resolve, reject) => {
-                const tx = this.db.transaction([storeName], 'readwrite');
-                const store = tx.objectStore(storeName);
+                const transaction = this.db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
                 const request = store.put(data);
                 request.onsuccess = () => resolve(request.result);
                 request.onerror = () => reject(request.error);
@@ -290,63 +338,87 @@ class StorageManager {
         if (this.cloudReady && this.isAdminData(storeName)) {
             try {
                 await this.updateInCloud(storeName, data);
+                console.log(`✅ Updated ${storeName} in cloud`);
             } catch (error) {
                 console.warn(`⚠️ Cloud update failed for ${storeName}:`, error);
             }
         }
+
         return result;
     }
 
-    async get(storeName, id) {
-        if (this.mode !== 'indexeddb') {
+async get(storeName, id) {
+        if (this.onlineOnlyMode) {
             if (storeName === 'settings') {
-                const settings = this.readFallbackStore('settings');
+                return this.memoryStore.settings[id] !== undefined ? { key: id, value: this.memoryStore.settings[id] } : undefined;
+            }
+            const arr = this.memoryStore[storeName] || [];
+            return arr.find(item => String(item.id) === String(id));
+        }
+
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
                 return settings[id] !== undefined ? { key: id, value: settings[id] } : undefined;
             }
-            const items = this.readFallbackStore(storeName);
+            const items = this.readLocalStore(storeName);
             return items.find(item => String(item.id) === String(id));
         }
+
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction([storeName], 'readonly');
-            const store = tx.objectStore(storeName);
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
             const request = store.get(id);
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
     }
 
-    async getAll(storeName) {
-        if (this.mode !== 'indexeddb') {
+async getAll(storeName) {
+        if (this.onlineOnlyMode) {
             if (storeName === 'settings') {
-                const settings = this.readFallbackStore('settings');
+                return Object.entries(this.memoryStore.settings).map(([key, value]) => ({ key, value }));
+            }
+            return this.memoryStore[storeName] || [];
+        }
+
+        if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
                 return Object.entries(settings).map(([key, value]) => ({ key, value }));
             }
-            return this.readFallbackStore(storeName);
+            return this.readLocalStore(storeName);
         }
+
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction([storeName], 'readonly');
-            const store = tx.objectStore(storeName);
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
             const request = store.getAll();
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
     }
 
-    async delete(storeName, id) {
-        if (this.mode !== 'indexeddb') {
+async delete(storeName, id) {
+        if (this.onlineOnlyMode) {
             if (storeName === 'settings') {
-                const settings = this.readFallbackStore('settings');
-                delete settings[id];
-                this.writeFallbackStore('settings', settings);
+                delete this.memoryStore.settings[id];
             } else {
-                const items = this.readFallbackStore(storeName)
-                    .filter(item => String(item.id) !== String(id));
-                this.writeFallbackStore(storeName, items);
+                this.memoryStore[storeName] = (this.memoryStore[storeName] || []).filter(item => String(item.id) !== String(id));
+            }
+        } else if (this.fallbackMode) {
+            if (storeName === 'settings') {
+                const settings = this.readLocalStore('settings');
+                delete settings[id];
+                this.writeLocalStore('settings', settings);
+            } else {
+                const items = this.readLocalStore(storeName).filter(item => String(item.id) !== String(id));
+                this.writeLocalStore(storeName, items);
             }
         } else {
             await new Promise((resolve, reject) => {
-                const tx = this.db.transaction([storeName], 'readwrite');
-                const store = tx.objectStore(storeName);
+                const transaction = this.db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
                 const request = store.delete(id);
                 request.onsuccess = () => resolve();
                 request.onerror = () => reject(request.error);
@@ -356,6 +428,7 @@ class StorageManager {
         if (this.cloudReady && this.isAdminData(storeName)) {
             try {
                 await this.deleteFromCloud(storeName, id);
+                console.log(`✅ Deleted ${storeName} from cloud`);
             } catch (error) {
                 console.warn(`⚠️ Cloud delete failed for ${storeName}:`, error);
             }

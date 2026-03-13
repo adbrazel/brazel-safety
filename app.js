@@ -20,6 +20,7 @@ class App {
             console.log('⏳ Initializing storage...');
             await storage.init();
             console.log('✅ Storage initialized');
+            this.showStorageModeBanner();
             const sm = document.getElementById('storage-mode');
             if (sm) sm.textContent = `Storage: ${storage.mode}`;
             
@@ -89,7 +90,7 @@ class App {
             let errorMsg = `Error initializing app.
 
 `;
-            errorMsg += `Storage mode fallback could not start in this browser.
+            errorMsg += `All browser storage modes were blocked in this browser.
 `;
             errorMsg += `Please try these steps:
 `;
@@ -234,24 +235,20 @@ class App {
     }
 
     async registerServiceWorker() {
-        // Clean reset package: unregister any old service workers so stale cached JS stops breaking the app.
-        if ('serviceWorker' in navigator) {
-            try {
+        try {
+            if ('serviceWorker' in navigator) {
                 const regs = await navigator.serviceWorker.getRegistrations();
                 for (const reg of regs) {
                     await reg.unregister();
                 }
-            } catch (error) {
-                console.warn('Service worker cleanup failed:', error);
             }
-        }
-        if ('caches' in window) {
-            try {
+            if (window.caches && caches.keys) {
                 const keys = await caches.keys();
-                await Promise.all(keys.map(key => caches.delete(key)));
-            } catch (error) {
-                console.warn('Cache cleanup failed:', error);
+                await Promise.all(keys.map(k => caches.delete(k)));
             }
+            console.log('🧹 Old service workers/caches cleared');
+        } catch (e) {
+            console.warn('SW cleanup warning:', e);
         }
         return true;
     }
@@ -604,6 +601,21 @@ class App {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
     }
+    showStorageModeBanner() {
+        let mode = 'indexeddb';
+        if (storage.onlineOnlyMode) mode = 'online';
+        else if (storage.fallbackMode) mode = 'localstorage';
+
+        const existing = document.getElementById('storage-mode-banner');
+        if (existing) existing.remove();
+
+        const banner = document.createElement('div');
+        banner.id = 'storage-mode-banner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 12px;font-size:14px;text-align:center;background:#111;color:#fff;';
+        banner.textContent = `Storage mode: ${mode}`;
+        document.body.appendChild(banner);
+    }
+
 }
 
 // Initialize app when DOM is ready
