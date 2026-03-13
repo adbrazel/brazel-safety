@@ -710,18 +710,8 @@ async fetchFormsForMonth() {
             supervisorStats
         };
     }
-        }
-    }
 
-    return {
-        formsCount,
-        attendeeTotal,
-        uniqueEmployees: uniqueEmployees.size,
-        uniqueJobs: uniqueJobs.size
-    };
-}
-
-async refreshReport() {
+    async refreshReport() {
     const setText = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.textContent = val;
