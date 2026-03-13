@@ -951,10 +951,19 @@ body {
 
 
 .btn-lock-signature{
-  padding: 6px 10px;
+  font-size: 12px;
+  padding: 6px 12px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
 }
 .btn-lock-signature:disabled{
-  opacity: 0.7;
+  opacity: 1;
+  background: #198754;
+  color: white;
+  cursor: default;
 }
 
 

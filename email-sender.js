@@ -198,7 +198,7 @@ class EmailSender {
             from_email: this.recipientEmail,
             job_name: formData.jobName,
             form_date: formData.date,
-            supervisor_name: formData.attendees?.[0]?.name || formData.reporter || formData.inspector || formData.supervisorName || formData.supervisor || 'Unknown',
+            supervisor_name: formData.attendees[0]?.name || 'Unknown',
             submission_time: new Date().toLocaleString('en-CA', { 
                 timeZone: 'America/Edmonton',
                 dateStyle: 'medium',

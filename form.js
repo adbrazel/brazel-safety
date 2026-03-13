@@ -762,9 +762,7 @@ removeAttendee(index) {
             this.currentForm = { id: formData.id };
             formData.submitted = false;
             
-            if (this.currentForm) {
-                formData.id = this.currentForm.id;
-                await storage.update('forms', formData);
+            await storage.update('forms', formData);
 
             // Attempt to save the form record to Supabase (best-effort)
             if (navigator.onLine) {
@@ -773,7 +771,6 @@ removeAttendee(index) {
                     formData.cloudSaved = true;
                     formData.cloudSavedAt = new Date().toISOString();
                     formData.cloudError = null;
-                    // Store returned id if present
                     if (cloud.data && cloud.data.id) formData.cloudId = cloud.data.id;
                     await storage.update('forms', formData);
                 } else {
@@ -782,11 +779,6 @@ removeAttendee(index) {
                     formData.cloudError = cloud.error || 'Unknown cloud save error';
                     await storage.update('forms', formData);
                 }
-            }
-
-            } else {
-                const id = await storage.add('forms', formData);
-                this.currentForm = { id };
             }
             
             alert('Draft saved successfully');

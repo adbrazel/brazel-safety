@@ -923,7 +923,6 @@ async exportReportCsv() {
             const doc = new jsPDF();
             let y = 18;
 
-            // Header
             doc.setFillColor(220, 53, 69);
             doc.rect(10, 10, 190, 14, 'F');
             doc.setTextColor(255, 255, 255);
@@ -940,7 +939,6 @@ async exportReportCsv() {
             doc.text(`Generated: ${new Date().toLocaleString()}`, 14, y);
             y += 10;
 
-            // Summary
             doc.setFont(undefined, 'bold');
             doc.setFontSize(13);
             doc.text('Summary', 14, y);
@@ -963,7 +961,6 @@ async exportReportCsv() {
                 }
             }
 
-            // Detailed sections
             y += 6;
             y = this.addPdfTable(doc, 'Top Employees', s.topEmployees || [], [
                 { label: 'Employee', key: 'employee', width: 120, truncate: 40 },
