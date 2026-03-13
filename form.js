@@ -5,6 +5,8 @@ class FormController {
         this.selectedHazards = [];
         this.attendees = [];
         this.photos = [];
+        this.isSubmitting = false;
+        this.isSavingDraft = false;
         this.autoSaveInterval = null;
     }
 
@@ -71,6 +73,8 @@ class FormController {
         this.selectedHazards = [];
         this.attendees = [];
         this.photos = [];
+        this.isSubmitting = false;
+        this.isSavingDraft = false;
         
         document.getElementById('hazard-assessment-form').reset();
         document.getElementById('hazard-assessment-form').style.display = 'block';
@@ -162,6 +166,8 @@ class FormController {
         
         // Don't restore photos - fresh photos each day
         this.photos = [];
+        this.isSubmitting = false;
+        this.isSavingDraft = false;
         
         this.hideDuplicateOptions();
         document.getElementById('hazard-assessment-form').style.display = 'block';
@@ -607,6 +613,8 @@ removeAttendee(index) {
     }
 
     async submitForm() {
+        if (this.isSubmitting) return;
+        this.isSubmitting = true;
         try {
             const formData = await this.collectFormData();
 
@@ -746,10 +754,14 @@ removeAttendee(index) {
         } catch (error) {
             console.error('Form submission error:', error);
             alert('Error: ' + error.message);
+        } finally {
+            this.isSubmitting = false;
         }
     }
 
     async saveDraft() {
+        if (this.isSavingDraft) return;
+        this.isSavingDraft = true;
         try {
             const formData = await this.collectFormData();
 
@@ -785,6 +797,8 @@ removeAttendee(index) {
         } catch (error) {
             console.error('Save draft error:', error);
             alert('Error saving draft: ' + error.message);
+        } finally {
+            this.isSavingDraft = false;
         }
     }
 
