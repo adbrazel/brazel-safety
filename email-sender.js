@@ -66,11 +66,19 @@ class EmailSender {
         });
     }
 
-    async sendFormEmail(pdfDoc, formData) {
-        const filename = pdfGenerator.generateFilename(
-            formData.jobName,
-            formData.date,
-            formData.attendees[0]?.name || 'Unknown'
+    async sendFormEmail(pdfDoc, formData, explicitFilename = null) {
+        const actorName =
+            formData.attendees?.[0]?.name ||
+            formData.reporter ||
+            formData.inspector ||
+            formData.supervisorName ||
+            formData.supervisor ||
+            'Unknown';
+
+        const filename = explicitFilename || pdfGenerator.generateFilename(
+            formData.jobName || 'General',
+            formData.date || new Date().toISOString().slice(0,10),
+            actorName
         );
         
         // Always download PDF to user's device first
@@ -190,7 +198,7 @@ class EmailSender {
             from_email: this.recipientEmail,
             job_name: formData.jobName,
             form_date: formData.date,
-            supervisor_name: formData.attendees[0]?.name || 'Unknown',
+            supervisor_name: formData.attendees?.[0]?.name || formData.reporter || formData.inspector || formData.supervisorName || formData.supervisor || 'Unknown',
             submission_time: new Date().toLocaleString('en-CA', { 
                 timeZone: 'America/Edmonton',
                 dateStyle: 'medium',

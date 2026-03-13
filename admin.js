@@ -620,7 +620,7 @@ async fetchFormsForMonth() {
     if (!range) throw new Error('Select a month.');
     const { data, error } = await supabaseClient
         .from('forms')
-        .select('id, created_at, job_name, supervisor_name, pdf_url, email_sent, data')
+        .select('id, created_at, form_type, job_name, supervisor_name, pdf_url, email_sent, data')
         .gte('created_at', range.startIso)
         .lt('created_at', range.endIso)
         .order('created_at', { ascending: false });
@@ -639,6 +639,7 @@ async fetchFormsForMonth() {
         const jobCounts = new Map();        // job -> forms count
         const hazardCounts = new Map();     // hazard -> count
         const supervisorCounts = new Map(); // supervisor -> { forms, emailed }
+        const formTypeCounts = new Map();   // type -> count
 
         const bump = (map, key, inc=1) => {
             const k = (key || '').toString().trim();
@@ -648,6 +649,9 @@ async fetchFormsForMonth() {
 
         for (const r of rows) {
             const data = r.data || {};
+            const rawType = r.form_type || data.formType || 'FLHA';
+            const formType = String(rawType).trim() || 'FLHA';
+            formTypeCounts.set(formType, (formTypeCounts.get(formType) || 0) + 1);
 
             const job = r.job_name || data.jobName || data.job_name || '';
             if (job) {
@@ -699,11 +703,16 @@ async fetchFormsForMonth() {
             .map(s => ({ supervisor: s.supervisor, forms: String(s.forms), emailed: `${s.emailed}/${s.forms}` }))
             .sort((a,b) => parseInt(b.forms,10) - parseInt(a.forms,10) || a.supervisor.localeCompare(b.supervisor));
 
+        const formTypeSummary = Array.from(formTypeCounts.entries())
+            .map(([type, count]) => ({ type, count }))
+            .sort((a,b) => b.count - a.count || a.type.localeCompare(b.type));
+
         return {
             formsCount,
             attendeeTotal,
             uniqueEmployees: uniqueEmployees.size,
             uniqueJobs: uniqueJobs.size,
+            formTypeSummary,
             topEmployees,
             topJobs,
             topHazards,
@@ -840,6 +849,164 @@ async exportReportCsv() {
             const tr = document.createElement('tr');
             tr.innerHTML = cols.map(c => `<td>${this.escapeHtml(r[c] ?? '')}</td>`).join('');
             tbody.appendChild(tr);
+        }
+    }
+
+    formatMonthLabel() {
+        const range = this.getReportMonthRange();
+        if (!range) return '';
+        const d = new Date(Date.UTC(range.y, range.m - 1, 1));
+        return d.toLocaleString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    }
+
+    addPdfLine(doc, text, x, y, width=170, lineHeight=5) {
+        const lines = doc.splitTextToSize(String(text ?? ''), width);
+        for (const line of lines) {
+            if (y > 275) {
+                doc.addPage();
+                y = 20;
+            }
+            doc.text(line, x, y);
+            y += lineHeight;
+        }
+        return y;
+    }
+
+    addPdfTable(doc, title, rows, columns, y) {
+        if (y > 240) {
+            doc.addPage();
+            y = 20;
+        }
+        doc.setFont(undefined, 'bold');
+        doc.setFontSize(12);
+        doc.text(title, 14, y);
+        y += 7;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        let x = 14;
+        const widths = columns.map(c => c.width || 40);
+        columns.forEach((c, i) => {
+            doc.text(c.label, x, y);
+            x += widths[i];
+        });
+        y += 5;
+        doc.setFont(undefined, 'normal');
+        doc.line(14, y - 3, 195, y - 3);
+
+        if (!rows.length) {
+            doc.text('No data', 14, y + 2);
+            return y + 8;
+        }
+
+        for (const row of rows) {
+            if (y > 275) {
+                doc.addPage();
+                y = 20;
+            }
+            let x = 14;
+            columns.forEach((c, i) => {
+                const val = row[c.key] == null ? '' : String(row[c.key]);
+                doc.text(val.substring(0, c.truncate || 32), x, y);
+                x += widths[i];
+            });
+            y += 5;
+        }
+        return y + 4;
+    }
+
+    async exportMonthlyReportPdf() {
+        try {
+            const rows = await this.fetchFormsForMonth();
+            const s = this.summarizeForms(rows);
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            let y = 18;
+
+            // Header
+            doc.setFillColor(220, 53, 69);
+            doc.rect(10, 10, 190, 14, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(16);
+            doc.text('brazel-safety Monthly Report', 105, 20, { align: 'center' });
+
+            y = 32;
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Month: ${this.formatMonthLabel()}`, 14, y);
+            y += 6;
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, y);
+            y += 10;
+
+            // Summary
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(13);
+            doc.text('Summary', 14, y);
+            y += 8;
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(11);
+            y = this.addPdfLine(doc, `Total forms completed: ${s.formsCount}`, 14, y);
+            y = this.addPdfLine(doc, `Total attendee signatures: ${s.attendeeTotal}`, 14, y);
+            y = this.addPdfLine(doc, `Unique employees: ${s.uniqueEmployees}`, 14, y);
+            y = this.addPdfLine(doc, `Unique jobs: ${s.uniqueJobs}`, 14, y);
+
+            if (s.formTypeSummary?.length) {
+                y += 3;
+                doc.setFont(undefined, 'bold');
+                doc.text('Form types', 14, y);
+                y += 6;
+                doc.setFont(undefined, 'normal');
+                for (const ft of s.formTypeSummary) {
+                    y = this.addPdfLine(doc, `${ft.type}: ${ft.count}`, 18, y);
+                }
+            }
+
+            // Detailed sections
+            y += 6;
+            y = this.addPdfTable(doc, 'Top Employees', s.topEmployees || [], [
+                { label: 'Employee', key: 'employee', width: 120, truncate: 40 },
+                { label: 'Forms', key: 'forms', width: 30 }
+            ], y);
+
+            y = this.addPdfTable(doc, 'Jobs', s.topJobs || [], [
+                { label: 'Job', key: 'job', width: 140, truncate: 48 },
+                { label: 'Forms', key: 'forms', width: 30 }
+            ], y);
+
+            y = this.addPdfTable(doc, 'Top Hazards', s.topHazards || [], [
+                { label: 'Hazard', key: 'hazard', width: 140, truncate: 48 },
+                { label: 'Count', key: 'count', width: 30 }
+            ], y);
+
+            y = this.addPdfTable(doc, 'Supervisor Stats', s.supervisorStats || [], [
+                { label: 'Supervisor', key: 'supervisor', width: 100, truncate: 32 },
+                { label: 'Forms', key: 'forms', width: 25 },
+                { label: 'Emailed', key: 'emailed', width: 35 }
+            ], y);
+
+            const compactRows = rows.slice(0, 50).map(r => ({
+                created_at: r.created_at ? new Date(r.created_at).toLocaleDateString() : '',
+                form_type: r.form_type || r.data?.formType || 'FLHA',
+                job: r.job_name || r.data?.jobName || '',
+                supervisor: r.supervisor_name || r.data?.supervisorName || r.data?.supervisor || r.data?.reporter || r.data?.inspector || '',
+                email: r.email_sent ? 'Yes' : 'No'
+            }));
+            y = this.addPdfTable(doc, 'Recent Forms (first 50)', compactRows, [
+                { label: 'Date', key: 'created_at', width: 28, truncate: 12 },
+                { label: 'Type', key: 'form_type', width: 28, truncate: 14 },
+                { label: 'Job', key: 'job', width: 64, truncate: 22 },
+                { label: 'Lead', key: 'supervisor', width: 50, truncate: 20 },
+                { label: 'Email', key: 'email', width: 20, truncate: 8 }
+            ], y);
+
+            const range = this.getReportMonthRange();
+            const filename = range ? `monthly_report_${range.y}-${String(range.m).padStart(2,'0')}.pdf` : 'monthly_report.pdf';
+            doc.save(filename);
+        } catch (err) {
+            console.error('❌ Monthly PDF export error:', err);
+            alert('Monthly PDF export error: ' + (err?.message || err));
         }
     }
 

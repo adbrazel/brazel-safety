@@ -616,6 +616,7 @@ removeAttendee(index) {
             formData.emailSent = formData.emailSent ?? false;
             formData.cloudSaved = formData.cloudSaved ?? null;
             await storage.saveForm(formData);
+            this.currentForm = { id: formData.id };
             
             // Generate PDF
             const pdfDoc = await pdfGenerator.generateHazardAssessmentPDF(formData);
@@ -707,31 +708,25 @@ removeAttendee(index) {
                 formData.submitted = true;
                 formData.submittedAt = new Date().toISOString();
                 
-                // Save form to storage (will sync to cloud if available)
-                if (this.currentForm) {
-                    formData.id = this.currentForm.id;
-                    await storage.update('forms', formData);
+                // Save form to storage (update the same local record created at submit start)
+                formData.id = formData.id || this.currentForm?.id;
+                await storage.update('forms', formData);
 
-            // Attempt to save the form record to Supabase (best-effort)
-            if (navigator.onLine) {
-                const cloud = await storage.saveFormToCloud(formData);
-                if (cloud.success) {
-                    formData.cloudSaved = true;
-                    formData.cloudSavedAt = new Date().toISOString();
-                    formData.cloudError = null;
-                    // Store returned id if present
-                    if (cloud.data && cloud.data.id) formData.cloudId = cloud.data.id;
-                    await storage.update('forms', formData);
-                } else {
-                    formData.cloudSaved = false;
-                    formData.cloudSavedAt = null;
-                    formData.cloudError = cloud.error || 'Unknown cloud save error';
-                    await storage.update('forms', formData);
-                }
-            }
-
-                } else {
-                    await storage.add('forms', formData);
+                // Attempt to save/update the form record in Supabase (best-effort)
+                if (navigator.onLine) {
+                    const cloud = await storage.saveFormToCloud(formData);
+                    if (cloud.success) {
+                        formData.cloudSaved = true;
+                        formData.cloudSavedAt = new Date().toISOString();
+                        formData.cloudError = null;
+                        if (cloud.data && cloud.data.id) formData.cloudId = cloud.data.id;
+                        await storage.update('forms', formData);
+                    } else {
+                        formData.cloudSaved = false;
+                        formData.cloudSavedAt = null;
+                        formData.cloudError = cloud.error || 'Unknown cloud save error';
+                        await storage.update('forms', formData);
+                    }
                 }
                 
                 let successMsg = `✅ Form submitted successfully!\n\n📥 PDF downloaded: ${result.filename}\n📧 Email sent to: safety@brazelconstruction.com`;
@@ -764,6 +759,7 @@ removeAttendee(index) {
             formData.emailSent = formData.emailSent ?? false;
             formData.cloudSaved = formData.cloudSaved ?? null;
             await storage.saveForm(formData);
+            this.currentForm = { id: formData.id };
             formData.submitted = false;
             
             if (this.currentForm) {

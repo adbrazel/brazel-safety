@@ -1,6 +1,6 @@
 {
-  "name": "Brazel Safety Documentation",
-  "short_name": "Brazel Safety",
+  "name": "brazel-safety",
+  "short_name": "brazel-safety",
   "description": "Field Level Hazard Assessment and Safety Documentation",
   "start_url": "/",
   "display": "standalone",
@@ -21,7 +21,10 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["productivity", "business"],
+  "categories": [
+    "productivity",
+    "business"
+  ],
   "screenshots": [],
   "shortcuts": [
     {

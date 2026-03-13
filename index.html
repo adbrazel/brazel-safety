@@ -6,9 +6,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>Brazel Safety Documentation</title>
+    <title>brazel-safety</title>
     <link rel="manifest" href="manifest.json?v=reset1">
-    <link rel="stylesheet" href="styles.css?build=controllerfix1">
+    <link rel="stylesheet" href="styles.css?build=monthlypdf1">
 </head>
 <body>
     <!-- Loading Screen -->
@@ -73,7 +73,8 @@
         </div>
         <div class="form-row" style="align-items:flex-end; gap:10px;">
             <button id="report-refresh" class="btn-secondary">Refresh</button>
-            <button id="report-export" class="btn-primary">Export CSV</button>
+            <button id="report-export" class="btn-secondary">Export CSV</button>
+                        <button id="report-export-pdf" class="btn-primary">Monthly Report PDF</button>
         </div>
     </div>
 
@@ -119,7 +120,7 @@
     <!-- Main Form Screen -->
     <div id="form-screen" class="screen" style="display: none;">
         <div class="header">
-            <h1 class="company-title">Brazel Construction Ltd.<br>Safety Forms Application</h1>
+            <h1 class="company-title">Brazel Construction Ltd.<br>Safety brazel-safety</h1>
             <div class="emergency-contact">
                 Emergency Contact: Aaron Brazel<br>
                 (403) 669-2900
@@ -628,18 +629,18 @@
 
     <!-- Scripts -->
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js?build=monthlypdf1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js?build=monthlypdf1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js?build=monthlypdf1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-client.js?build=controllerfix1"></script>
-    <script src="storage.js?build=controllerfix1"></script>
-    <script src="pdf-generator.js?build=controllerfix1"></script>
-    <script src="email-sender.js?build=controllerfix1"></script>
-    <script src="admin.js?build=controllerfix1"></script>
-    <script src="form.js?build=controllerfix1"></script>
-    <script src="incident.js?build=controllerfix1"></script>
-    <script src="inspection.js?build=controllerfix1"></script>
-    <script src="app.js?build=controllerfix1"></script>
+    <script src="supabase-client.js?build=monthlypdf1"></script>
+    <script src="storage.js?build=monthlypdf1"></script>
+    <script src="pdf-generator.js?build=monthlypdf1"></script>
+    <script src="email-sender.js?build=monthlypdf1"></script>
+    <script src="admin.js?build=monthlypdf1"></script>
+    <script src="form.js?build=monthlypdf1"></script>
+    <script src="incident.js?build=monthlypdf1"></script>
+    <script src="inspection.js?build=monthlypdf1"></script>
+    <script src="app.js?build=monthlypdf1"></script>
 </body>
 </html>

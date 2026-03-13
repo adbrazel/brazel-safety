@@ -153,12 +153,14 @@ class IncidentController {
     }
 
     async submit() {
+        try {
         const formData = this.collect();
 
         // Always save locally first
         formData.submitted = false;
         formData.submittedAt = null;
         await storage.saveForm(formData);
+        this.currentForm = { id: formData.id };
 
         // PDF
         const pdfDoc = await pdfGenerator.generateIncidentPDF(formData);
@@ -224,6 +226,10 @@ class IncidentController {
 
         document.getElementById('incident-screen').style.display = 'none';
         document.getElementById('form-screen').style.display = 'block';
+        } catch (error) {
+            console.error('Submit error:', error);
+            alert('Error submitting form: ' + (error?.message || error));
+        }
     }
 
     async readAndCompressPhotos(fileList) {
