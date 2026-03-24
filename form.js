@@ -435,6 +435,9 @@ class FormController {
                 lockBtn.textContent = 'Locked';
             }
         }
+
+        // Save a local/cloud draft immediately after a signature is locked.
+        this.saveDraftAfterSignatureLock();
     }
 
 removeAttendee(index) {
@@ -612,11 +615,49 @@ removeAttendee(index) {
         return formData;
     }
 
+
+    applySignatureAutoEmailSchedule(formData) {
+        const now = new Date();
+        formData.formType = formData.formType || 'flha';
+        formData.autoEmailEnabled = true;
+        formData.signatureSavedAt = now.toISOString();
+        formData.autoEmailDueAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
+        formData.emailSent = formData.emailSent ?? false;
+        return formData;
+    }
+
+    async saveDraftAfterSignatureLock() {
+        try {
+            let formData = await this.collectFormData();
+            if (this.currentForm?.id) formData.id = this.currentForm.id;
+            formData = this.applySignatureAutoEmailSchedule(formData);
+            formData.submitted = false;
+            formData.submittedAt = null;
+            await storage.saveForm(formData);
+            this.currentForm = { id: formData.id };
+
+            if (navigator.onLine && storage.cloudReady) {
+                const cloud = await storage.saveFormToCloud(formData);
+                if (cloud.success) {
+                    formData.cloudSaved = true;
+                    formData.cloudSavedAt = new Date().toISOString();
+                    formData.cloudError = null;
+                    if (cloud.data && cloud.data.id) formData.cloudId = cloud.data.id;
+                    await storage.update('forms', formData);
+                }
+            }
+            console.log('✅ Draft saved after signature lock');
+        } catch (error) {
+            console.warn('Signature draft save skipped:', error?.message || error);
+        }
+    }
+
     async submitForm() {
         if (this.isSubmitting) return;
         this.isSubmitting = true;
         try {
             const formData = await this.collectFormData();
+            formData.formType = 'flha';
 
             // Initial local save (so the form isn't lost even if the browser closes mid-submit)
             formData.submitted = false;
@@ -764,6 +805,7 @@ removeAttendee(index) {
         this.isSavingDraft = true;
         try {
             const formData = await this.collectFormData();
+            formData.formType = 'flha';
 
             // Initial local save (so the form isn't lost even if the browser closes mid-submit)
             formData.submitted = false;

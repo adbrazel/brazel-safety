@@ -98,7 +98,45 @@ class IncidentController {
             const pi = document.getElementById('incident-photos');
             if (pi) pi.disabled = true;
             if (clr) clr.disabled = true;
+
+            this.saveAfterSignatureLock();
         });
+    }
+
+    applyAutoEmailSchedule(formData) {
+        const now = new Date();
+        formData.formType = 'incident';
+        formData.autoEmailEnabled = true;
+        formData.signatureSavedAt = now.toISOString();
+        formData.autoEmailDueAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
+        formData.emailSent = formData.emailSent ?? false;
+        return formData;
+    }
+
+    async saveAfterSignatureLock() {
+        try {
+            let formData = this.collect();
+            if (this.currentForm?.id) formData.id = this.currentForm.id;
+            formData = this.applyAutoEmailSchedule(formData);
+            formData.submitted = false;
+            formData.submittedAt = null;
+            await storage.saveForm(formData);
+            this.currentForm = { id: formData.id };
+
+            if (navigator.onLine && storage.cloudReady) {
+                const cloud = await storage.saveFormToCloud(formData);
+                if (cloud.success) {
+                    formData.cloudSaved = true;
+                    formData.cloudSavedAt = new Date().toISOString();
+                    formData.cloudError = null;
+                    if (cloud.data && cloud.data.id) formData.cloudId = cloud.data.id;
+                    await storage.update('forms', formData);
+                }
+            }
+            console.log('✅ Incident draft saved after signature lock');
+        } catch (error) {
+            console.warn('Incident signature draft save skipped:', error?.message || error);
+        }
     }
 
     async loadJobs() {
@@ -155,6 +193,7 @@ class IncidentController {
     async submit() {
         try {
         const formData = this.collect();
+            formData.formType = 'incident';
 
         // Always save locally first
         formData.submitted = false;
@@ -216,6 +255,7 @@ class IncidentController {
         // Mark submitted and persist
         formData.submitted = true;
         formData.submittedAt = new Date().toISOString();
+        formData.autoEmailDueAt = null;
         await storage.update('forms', formData);
 
         if (result?.emailFailed || result?.needsManualEmail) {
