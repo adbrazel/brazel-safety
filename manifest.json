@@ -2,7 +2,7 @@
   "name": "brazel-safety",
   "short_name": "brazel-safety",
   "description": "Field Level Hazard Assessment and Safety Documentation",
-  "start_url": "./",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#DC3545",
   "theme_color": "#DC3545",
@@ -29,9 +29,8 @@
   "shortcuts": [
     {
       "name": "New Form",
-      "url": "./?action=new-form",
+      "url": "/?action=new-form",
       "description": "Start a new hazard assessment form"
     }
-  ],
-  "scope": "./"
+  ]
 }

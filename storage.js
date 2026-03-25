@@ -503,38 +503,13 @@ async delete(storeName, id) {
     }
 
     async getRecentForms(days = 30) {
-        // Pull recent forms from cloud first when available so duplicates remain available
-        await this.syncRecentFormsFromCloud(Math.min(days, 14));
-
         const forms = await this.getAll('forms');
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - days);
-
         return forms
-            .filter(form => {
-                const d = form.date || form.createdAt || form.created_at || form.submittedAt || form.signatureSavedAt || null;
-                return new Date(d || cutoff) >= cutoff;
-            })
-            .sort((a, b) => new Date(b.date || b.createdAt || b.created_at || b.submittedAt || 0) - new Date(a.date || a.createdAt || a.created_at || a.submittedAt || 0));
+            .filter(form => new Date(form.date || form.createdAt || form.submittedAt || cutoff) >= cutoff)
+            .sort((a, b) => new Date(b.date || b.createdAt || b.submittedAt || 0) - new Date(a.date || a.createdAt || a.submittedAt || 0));
     }
-
-    async syncRecentFormsFromCloud(days = 14) {
-        if (!this.cloudReady || !window.db || typeof db.getRecentForms !== 'function') {
-            return [];
-        }
-        try {
-            const forms = await db.getRecentForms(days);
-            for (const form of forms) {
-                // Keep all forms locally available, but duplicate workflow can filter by type
-                await this.upsertLocal('forms', form);
-            }
-            return forms;
-        } catch (error) {
-            console.error('❌ Recent forms cloud sync error:', error);
-            return [];
-        }
-    }
-
 
     async getPendingForms() {
         const forms = await this.getAll('forms');

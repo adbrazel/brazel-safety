@@ -180,44 +180,6 @@
       },
 
       // Safer insert that matches the recommended 'forms' schema (with jsonb 'data')
-
-      async getRecentForms(days = 14) {
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - days);
-        const cutoffIso = cutoff.toISOString();
-
-        const { data, error } = await client
-          .from("forms")
-          .select("id, created_at, form_type, job_name, supervisor_name, email_sent, pdf_url, pdf_filename, photo_urls, data")
-          .gte("created_at", cutoffIso)
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-
-        return (data || []).map((row) => {
-          const payload = row.data && typeof row.data === "object" ? { ...row.data } : {};
-          return {
-            ...payload,
-            id: row.id,
-            created_at: row.created_at,
-            form_type: row.form_type || payload.formType || null,
-            formType: payload.formType || row.form_type || null,
-            job_name: row.job_name || payload.jobName || null,
-            jobName: payload.jobName || row.job_name || null,
-            supervisor_name: row.supervisor_name || payload.supervisorName || null,
-            supervisorName: payload.supervisorName || row.supervisor_name || null,
-            email_sent: typeof row.email_sent === "boolean" ? row.email_sent : !!payload.emailSent,
-            emailSent: typeof payload.emailSent === "boolean" ? payload.emailSent : !!row.email_sent,
-            pdf_url: row.pdf_url || payload.pdfUrl || null,
-            pdfUrl: payload.pdfUrl || row.pdf_url || null,
-            pdf_filename: row.pdf_filename || payload.pdfFilename || null,
-            pdfFilename: payload.pdfFilename || row.pdf_filename || null,
-            photo_urls: row.photo_urls || payload.photoUrls || null,
-            photoUrls: payload.photoUrls || row.photo_urls || null,
-          };
-        });
-      },
-
       async addFormMapped(formData) {
         const payload = {
           job_name: formData.jobName || formData.job_name || null,

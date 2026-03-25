@@ -66,26 +66,14 @@ class EmailSender {
         });
     }
 
-    getFormActorName(formData) {
-        return (
+    async sendFormEmail(pdfDoc, formData, explicitFilename = null) {
+        const actorName =
             formData.attendees?.[0]?.name ||
             formData.reporter ||
             formData.inspector ||
             formData.supervisorName ||
             formData.supervisor ||
-            'Unknown'
-        );
-    }
-
-    getFormTypeLabel(formData) {
-        const t = (formData.formType || formData.form_type || '').toString().toLowerCase();
-        if (t === 'incident') return 'INCIDENT / NEAR MISS REPORT';
-        if (t === 'inspection') return 'WORKSITE INSPECTION REPORT';
-        return 'FIELD LEVEL HAZARD ASSESSMENT';
-    }
-
-    async sendFormEmail(pdfDoc, formData, explicitFilename = null, options = {}) {
-        const actorName = this.getFormActorName(formData);
+            'Unknown';
 
         const filename = explicitFilename || pdfGenerator.generateFilename(
             formData.jobName || 'General',
@@ -93,20 +81,14 @@ class EmailSender {
             actorName
         );
         
-        const shouldDownloadPdf = options.downloadPdf !== false;
-
-        // Download PDF to device unless this is a background auto-email
-        if (shouldDownloadPdf) {
-            console.log('📥 Downloading PDF to device:', filename);
-            try {
-                pdfDoc.save(filename);
-                console.log('✅ PDF downloaded successfully');
-            } catch (error) {
-                console.error('❌ PDF download error:', error);
-                throw new Error('Failed to download PDF: ' + error.message);
-            }
-        } else {
-            console.log('📧 Background email mode: skipping PDF download');
+        // Always download PDF to user's device first
+        console.log('📥 Downloading PDF to device:', filename);
+        try {
+            pdfDoc.save(filename);
+            console.log('✅ PDF downloaded successfully');
+        } catch (error) {
+            console.error('❌ PDF download error:', error);
+            throw new Error('Failed to download PDF: ' + error.message);
         }
         
         // Try to initialize EmailJS if not already done
@@ -216,7 +198,7 @@ class EmailSender {
             from_email: this.recipientEmail,
             job_name: formData.jobName,
             form_date: formData.date,
-            supervisor_name: this.getFormActorName(formData),
+            supervisor_name: formData.attendees[0]?.name || 'Unknown',
             submission_time: new Date().toLocaleString('en-CA', { 
                 timeZone: 'America/Edmonton',
                 dateStyle: 'medium',
@@ -257,136 +239,91 @@ class EmailSender {
     }
 
     buildFormEmailBody(formData, filename) {
-        // Build complete form content as plain text
+        // Build complete form content as plain text (EmailJS doesn't support HTML in free tier well)
         let body = '';
-        const typeLabel = this.getFormTypeLabel(formData);
-        const typeKey = (formData.formType || formData.form_type || '').toString().toLowerCase();
-
+        
         body += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-        body += `   ${typeLabel}\n`;
+        body += '   FIELD LEVEL HAZARD ASSESSMENT\n';
         body += '   Brazel Construction Ltd.\n';
         body += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-
+        
         body += '📋 JOB INFORMATION\n';
         body += '─────────────────────────────────────────\n';
-        body += `Job: ${formData.jobName || 'Not specified'}\n`;
-        body += `Date: ${formData.date || 'Not specified'}\n`;
-
-        if (typeKey === 'incident') {
-            body += `Time: ${formData.time || 'Not specified'}\n`;
-            body += `Location: ${formData.location || 'Not specified'}\n`;
-            body += `Reported by: ${formData.reporter || 'Not specified'}\n`;
-            body += `Supervisor: ${formData.supervisor || 'Not specified'}\n`;
-            body += `Type: ${formData.incidentType || 'Not specified'}\n`;
-            body += `Classification: ${formData.classification || 'Not specified'}\n`;
-            body += `Reported to Alberta OHS: ${formData.reportedToOHS || 'Not specified'}\n`;
-            body += `Injury: ${formData.injury || 'Not specified'}\n`;
-            body += `Involved worker: ${formData.involvedWorker || 'Not specified'}\n`;
-            body += `Equipment: ${formData.equipment || 'Not specified'}\n\n`;
-
-            body += '📝 INCIDENT DETAILS\n';
-            body += '─────────────────────────────────────────\n';
-            body += `What happened:\n${formData.description || 'Not specified'}\n\n`;
-            body += `Immediate actions:\n${formData.actions || 'Not specified'}\n\n`;
-            if (formData.rootCauses) body += `Root cause(s):\n${formData.rootCauses}\n\n`;
-            if (formData.correctiveActions) body += `Corrective actions:\n${formData.correctiveActions}\n\n`;
-            if (formData.witnesses) body += `Witnesses:\n${formData.witnesses}\n\n`;
-        } else if (typeKey === 'inspection') {
-            body += `Inspector: ${formData.inspector || 'Not specified'}\n\n`;
-
-            body += '🔎 INSPECTION CHECKLIST\n';
-            body += '─────────────────────────────────────────\n';
-            if (Array.isArray(formData.checklist) && formData.checklist.length) {
-                formData.checklist.forEach((item, index) => {
-                    body += `${index + 1}. ${item.label || item.key}: ${item.status || ''}`;
-                    if (item.note) body += ` — ${item.note}`;
-                    body += '\n';
-                });
-            } else {
-                body += 'No checklist items recorded\n';
-            }
-            body += '\n';
-
-            body += '🛠 FINDINGS / CORRECTIVE ACTIONS\n';
-            body += '─────────────────────────────────────────\n';
-            if (Array.isArray(formData.findings) && formData.findings.length) {
-                formData.findings.forEach((f, index) => {
-                    body += `${index + 1}. Finding: ${f.finding || 'Not specified'}\n`;
-                    body += `   Action: ${f.action || 'Not specified'}\n`;
-                    body += `   Owner: ${f.owner || 'Not specified'} | Due: ${f.due || 'Not specified'}\n`;
-                });
-            } else {
-                body += 'No findings recorded\n';
-            }
-            body += '\n';
-        } else {
-            body += `Address: ${formData.address || 'Not specified'}\n`;
-            if (formData.address2) body += `Address Line 2: ${formData.address2}\n`;
-            body += `Emergency Phone: ${formData.emergencyPhone || 'Not specified'}\n`;
-            body += `Muster Point: ${formData.musterPoint || 'Not specified'}\n`;
-            body += `ERP Reviewed: ${formData.erpReviewed === 'yes' ? 'Yes' : 'No'}\n`;
-            body += `Scope of Work: ${formData.scopeOfWork || 'Not specified'}\n\n`;
-
-            body += '⚠️ HAZARD ASSESSMENT MATRIX\n';
-            body += '─────────────────────────────────────────\n';
-            if (formData.hazardMatrix && formData.hazardMatrix.length > 0) {
-                formData.hazardMatrix.forEach((item, index) => {
-                    body += `${index + 1}. ${item.hazard}\n`;
-                    body += `   Risk: ${item.risk} | Severity: ${item.severity}\n`;
-                    body += `   Controls: ${item.controls}\n\n`;
-                });
-            } else {
-                body += 'No hazards identified\n\n';
-            }
-
-            body += '💬 SAFETY MEETING TOPICS DISCUSSED\n';
-            body += '─────────────────────────────────────────\n';
-            if (formData.discussedTopics && formData.discussedTopics.length > 0) {
-                formData.discussedTopics.forEach(topic => {
-                    body += `✓ ${topic.name}\n`;
-                });
-            } else {
-                body += 'No topics selected\n';
-            }
-            body += '\n';
-            if (formData.additionalTopics && formData.additionalTopics.trim()) {
-                body += 'Additional Topics:\n';
-                body += formData.additionalTopics + '\n\n';
-            }
-            if (formData.safetyMeeting && formData.safetyMeeting.trim()) {
-                body += 'Safety Meeting Notes:\n';
-                body += formData.safetyMeeting + '\n\n';
-            }
-
-            body += '✍️ ATTENDEES & SIGNATURES\n';
-            body += '─────────────────────────────────────────\n';
-            if (formData.attendees && formData.attendees.length > 0) {
-                formData.attendees.forEach((attendee, index) => {
-                    const role = index === 0 ? 'Supervisor' : 'Attendee';
-                    const signed = attendee.signature ? '✓ Signed' : '✗ Not signed';
-                    body += `${index + 1}. ${attendee.name} (${role}) - ${signed}\n`;
-                });
-            } else {
-                body += 'No attendees recorded\n';
-            }
-            body += '\n';
+        body += `Job: ${formData.jobName}\n`;
+        body += `Date: ${formData.date}\n`;
+        body += `Address: ${formData.address || 'Not specified'}\n`;
+        if (formData.address2) {
+            body += `Address Line 2: ${formData.address2}\n`;
         }
-
+        body += `Emergency Phone: ${formData.emergencyPhone || 'Not specified'}\n`;
+        body += `Muster Point: ${formData.musterPoint || 'Not specified'}\n`;
+        body += `ERP Reviewed: ${formData.erpReviewed === 'yes' ? 'Yes' : 'No'}\n`;
+        body += `Scope of Work: ${formData.scopeOfWork || 'Not specified'}\n\n`;
+        
+        // Hazards
+        if (formData.hazardMatrix && formData.hazardMatrix.length > 0) {
+            body += '⚠️  HAZARD ASSESSMENT MATRIX\n';
+            body += '─────────────────────────────────────────\n';
+            formData.hazardMatrix.forEach((item, index) => {
+                body += `${index + 1}. ${item.hazard}\n`;
+                body += `   Risk: ${item.risk} | Severity: ${item.severity}\n`;
+                body += `   Controls: ${item.controls}\n\n`;
+            });
+        } else {
+            body += '⚠️  HAZARD ASSESSMENT MATRIX\n';
+            body += '─────────────────────────────────────────\n';
+            body += 'No hazards identified\n\n';
+        }
+        
+        // Safety Topics
+        body += '💬 SAFETY MEETING TOPICS DISCUSSED\n';
+        body += '─────────────────────────────────────────\n';
+        if (formData.discussedTopics && formData.discussedTopics.length > 0) {
+            formData.discussedTopics.forEach(topic => {
+                body += `✓ ${topic.name}\n`;
+            });
+        } else {
+            body += 'No topics selected\n';
+        }
+        body += '\n';
+        
+        if (formData.additionalTopics && formData.additionalTopics.trim()) {
+            body += 'Additional Topics:\n';
+            body += formData.additionalTopics + '\n\n';
+        }
+        
+        if (formData.safetyMeeting && formData.safetyMeeting.trim()) {
+            body += 'Safety Meeting Notes:\n';
+            body += formData.safetyMeeting + '\n\n';
+        }
+        
+        // Attendees
+        body += '✍️  ATTENDEES & SIGNATURES\n';
+        body += '─────────────────────────────────────────\n';
+        if (formData.attendees && formData.attendees.length > 0) {
+            formData.attendees.forEach((attendee, index) => {
+                const role = index === 0 ? 'Supervisor' : 'Attendee';
+                const signed = attendee.signature ? '✓ Signed' : '✗ Not signed';
+                body += `${index + 1}. ${attendee.name} (${role}) - ${signed}\n`;
+            });
+        }
+        body += '\n';
+        
+        // Photos
         if (formData.photos && formData.photos.length > 0) {
             body += '📷 PHOTOS\n';
             body += '─────────────────────────────────────────\n';
             body += `${formData.photos.length} photo(s) attached to form\n`;
             body += '(View in downloaded PDF)\n\n';
         }
-
-        if (formData.signature && typeKey !== 'flha') {
-            body += '✍️ Signature captured\n\n';
-        }
-
+        
         body += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         body += `PDF File: ${filename}\n`;
         body += `Submitted: ${new Date().toLocaleString('en-CA', { timeZone: 'America/Edmonton' })}\n`;
-        body += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        body += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+        body += 'This form has been downloaded to the worker\'s device.\n';
+        body += 'PDF backup is available on their device.\n';
+        
         return body;
     }
 

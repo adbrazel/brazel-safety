@@ -1,58 +1,12 @@
-const APP_VERSION = '2026.03.24-cachefix1';
-
 // Main App Controller
 class App {
     constructor() {
         this.isOnline = navigator.onLine;
     }
 
-
-    async handleAppVersionUpdate() {
-        try {
-            const versionKey = 'brazelSafetyAppVersion';
-            const reloadKey = 'brazelSafetyReloadedForVersion';
-            const previousVersion = localStorage.getItem(versionKey);
-            const reloadedForVersion = sessionStorage.getItem(reloadKey);
-
-            if (previousVersion !== APP_VERSION) {
-                console.log(`🔄 App version changed from "${previousVersion || 'none'}" to "${APP_VERSION}"`);
-
-                if ('serviceWorker' in navigator) {
-                    const regs = await navigator.serviceWorker.getRegistrations();
-                    for (const reg of regs) {
-                        await reg.unregister();
-                    }
-                }
-
-                if (window.caches && caches.keys) {
-                    const keys = await caches.keys();
-                    await Promise.all(keys.map(k => caches.delete(k)));
-                }
-
-                localStorage.setItem(versionKey, APP_VERSION);
-
-                // Reload only once per tab for the new version
-                if (reloadedForVersion !== APP_VERSION) {
-                    sessionStorage.setItem(reloadKey, APP_VERSION);
-                    const cleanUrl = window.location.origin + window.location.pathname;
-                    window.location.replace(cleanUrl);
-                    return false;
-                }
-            } else if (reloadedForVersion !== APP_VERSION) {
-                sessionStorage.setItem(reloadKey, APP_VERSION);
-            }
-        } catch (e) {
-            console.warn('Version update check warning:', e);
-        }
-        return true;
-    }
-
     async init() {
         try {
             console.log('🚀 Starting app initialization...');
-
-            const shouldContinue = await this.handleAppVersionUpdate();
-            if (!shouldContinue) return;
             
             // Show loading screen
             document.getElementById('loading-screen').style.display = 'flex';
@@ -66,6 +20,9 @@ class App {
             console.log('⏳ Initializing storage...');
             await storage.init();
             console.log('✅ Storage initialized');
+            this.showStorageModeBanner();
+            const sm = document.getElementById('storage-mode');
+            if (sm) sm.textContent = `Storage: ${storage.mode}`;
             
             // Initialize default safety topics if needed
             console.log('⏳ Initializing safety topics...');
@@ -108,8 +65,6 @@ class App {
             console.log('⏳ Checking pending forms...');
             await this.checkPendingForms();
             console.log('✅ Pending forms checked');
-
-            this.setupAutoEmailMonitor();
             
             // Hide loading screen and show form screen
             console.log('✅ Hiding loading screen...');
@@ -264,34 +219,24 @@ class App {
         for (const form of pendingForms) {
             try {
                 // Generate PDF
-                const pdfDoc = await this.buildPdfForForm(form);
+                const pdfDoc = await pdfGenerator.generateHazardAssessmentPDF(form);
                 
                 // Try to send
-                const filename = pdfGenerator.generateFilename(
-                    form.jobName || 'General',
-                    form.date || new Date().toISOString().slice(0,10),
-                    this.getActorName(form)
-                );
-                const result = await emailSender.sendFormEmail(pdfDoc, form, filename, { downloadPdf: false });
+                const result = await emailSender.sendFormEmail(pdfDoc, form);
                 
                 if (result.success) {
                     // Mark as submitted
                     form.submitted = true;
                     form.submittedAt = new Date().toISOString();
-                    form.autoEmailDueAt = null;
                     await storage.update('forms', form);
                 }
             } catch (error) {
                 console.error('Error syncing form:', error);
-                form.autoEmailDueAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-                await storage.update('forms', form);
             }
         }
     }
 
     async registerServiceWorker() {
-        // Stability-first: do not install an offline cache layer.
-        // Only remove any old service workers/caches that may still exist.
         try {
             if ('serviceWorker' in navigator) {
                 const regs = await navigator.serviceWorker.getRegistrations();
@@ -421,18 +366,6 @@ class App {
         }
     }
 
-
-    async buildPdfForForm(form) {
-        const type = (form.formType || form.form_type || '').toString().toLowerCase();
-        if (type === 'incident') return await pdfGenerator.generateIncidentPDF(form);
-        if (type === 'inspection') return await pdfGenerator.generateInspectionPDF(form);
-        return await pdfGenerator.generateHazardAssessmentPDF(form);
-    }
-
-    getActorName(form) {
-        return form.attendees?.[0]?.name || form.reporter || form.inspector || form.supervisorName || form.supervisor || 'Unknown';
-    }
-
     escapeHtml(str) {
         return String(str)
             .replace(/&/g, '&amp;')
@@ -490,14 +423,7 @@ class App {
     formSummary(form) {
         const job = form.jobName || form.job || 'Unknown job';
         const date = form.date || '';
-        const lead = (
-            (form.attendees && form.attendees[0] && form.attendees[0].name) ||
-            form.reporter ||
-            form.inspector ||
-            form.supervisorName ||
-            form.supervisor ||
-            ''
-        );
+        const lead = (form.attendees && form.attendees[0] && form.attendees[0].name) ? form.attendees[0].name : '';
         const status = form.emailSent ? 'Emailed' : 'Pending';
         return { job, date, lead, status };
     }
@@ -627,9 +553,9 @@ class App {
 
             // Recompute filename (consistent)
             const filename = pdfGenerator.generateFilename(
-                form.jobName || 'General',
-                form.date || new Date().toISOString().slice(0,10),
-                this.getActorName(form)
+                form.jobName,
+                form.date,
+                form.attendees?.[0]?.name || 'Unknown'
             );
 
             // Attempt upload if cloud available
@@ -647,7 +573,7 @@ class App {
             }
 
             // Attempt email send (also downloads PDF again)
-            const result = await emailSender.sendFormEmail(pdfDoc, form, filename);
+            const result = await emailSender.sendFormEmail(pdfDoc, form);
 
             // Persist updated fields
             form.submitted = true;
@@ -678,7 +604,18 @@ class App {
             .replace(/'/g, '&#039;');
     }
     showStorageModeBanner() {
-        return;
+        let mode = 'indexeddb';
+        if (storage.onlineOnlyMode) mode = 'online';
+        else if (storage.fallbackMode) mode = 'localstorage';
+
+        const existing = document.getElementById('storage-mode-banner');
+        if (existing) existing.remove();
+
+        const banner = document.createElement('div');
+        banner.id = 'storage-mode-banner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 12px;font-size:14px;text-align:center;background:#111;color:#fff;';
+        banner.textContent = `Storage mode: ${mode}`;
+        document.body.appendChild(banner);
     }
 
 }
